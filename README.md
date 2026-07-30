@@ -62,6 +62,13 @@ python -m pip install \
 python -m pip install -e '.[prepare,test]'
 ```
 
+The `prepare` extra installs
+[MobileSAM](https://github.com/ChaoningZhang/MobileSAM) and `timm`. GraRe
+implements the required
+[Point-MAE](https://github.com/Pang-Yatian/Point-MAE) encoder internally, so
+no separate Point-MAE source checkout is needed; its pretrained weight is
+downloaded in the next section.
+
 To regenerate frozen-detector candidate dumps, install the shared detector
 runtime and build dependencies. This requires a CUDA toolkit with `nvcc` that
 is compatible with the PyTorch build above:
@@ -128,8 +135,10 @@ source "$PWD/grare-assets/grare_paths.env"
 Download GraspNet-1Billion from the
 [official GraspNet page](https://graspnet.net/datasets.html), accept its terms,
 and extract it to `$GRASPNET_ROOT`. Its `scenes/` and `models/` directories
-must remain directly below that root. Download the two public backbone weights
-into the names expected by GraRe:
+must remain directly below that root. Download the public
+[MobileSAM](https://github.com/ChaoningZhang/MobileSAM) and
+[Point-MAE](https://github.com/Pang-Yatian/Point-MAE) weights into the names
+expected by GraRe:
 
 ```bash
 ./scripts/prepare_data_assets.sh \
