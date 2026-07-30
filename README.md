@@ -120,8 +120,8 @@ python -m pip install grasp_nms
 ```
 
 For a different CUDA version, install the matching PyTorch wheel before
-`python -m pip install -e '.[prepare,test]'`. Other public upstream projects
-are listed in [DEPENDENCIES.md](DEPENDENCIES.md).
+installing GraRe and the dependencies listed above. Other public upstream
+projects are listed in [DEPENDENCIES.md](DEPENDENCIES.md).
 
 ## Downloads
 
@@ -187,6 +187,72 @@ dumps:
 ./scripts/check_downloaded_assets.sh
 ```
 
+## Prepare
+
+GraRe uses the three inputs described in the paper: unchanged candidate
+attributes, shell-stratified local geometry, and object context. Run each
+frozen detector with its downloaded checkpoint on the GraspNet train and test
+splits, retaining every `(K, 17)` GraspGroup output under
+`$GRARE_DUMP_ROOT`. For example, the GN-RealSense dumps are placed as:
+
+```text
+$GRARE_DUMP_ROOT/graspnet_baseline/realsense/
+├── train/scene_0000/realsense/0000.npy
+└── test/scene_0100/realsense/0000.npy
+```
+
+The following command prepares the three inputs for GN-RealSense training:
+
+```bash
+grare-prepare \
+  --input-root "$GRARE_DUMP_ROOT/graspnet_baseline/realsense/train" \
+  --input-format detector-dump \
+  --output-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/realsense/local_cloud/train" \
+  --object-cloud-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/realsense/object_cloud/train" \
+  --detector graspnet_baseline \
+  --benchmark graspnet \
+  --dataset-root "$GRASPNET_ROOT" \
+  --camera realsense \
+  --split train \
+  --cloud-sampler stratified_fps \
+  --shell-edges 0,0.005,0.015,0.025,0.040 \
+  --shell-budgets 64,128,128,192 \
+  --local-cloud-max-points 512 \
+  --object-cloud-points 512 \
+  --sam-checkpoint "$GRARE_SAM_CKPT" \
+  --omit-object-cloud
+```
+
+This preserves candidate attributes in `local_cloud/`, samples four radial
+shells for local geometry, and writes MobileSAM object clouds to the
+`object_cloud/` sidecar. Add `--limit 1` for a one-frame check, then repeat the
+command for `test` by changing the input, output, and `--split` paths.
+
+Precompute the frozen Point-MAE object features for each split:
+
+```bash
+grare-precompute-object \
+  --archive-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/realsense/local_cloud/train" \
+  --object-cloud-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/realsense/object_cloud/train" \
+  --output-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/realsense/object_pooled/train" \
+  --pmae-ckpt "$GRARE_POINT_MAE_CKPT" \
+  --object-cloud-points 512 \
+  --batch-size 256 \
+  --device cuda
+```
+
+Repeat this command for `test`. The resulting three input assets are:
+
+```text
+$GRARE_DATA_ROOT/relabeled/graspnet_baseline/realsense/
+├── local_cloud/       candidate attributes and shell-wise local geometry
+├── object_cloud/      MobileSAM object point clouds
+└── object_pooled/     frozen Point-MAE object features
+```
+
+Replace `graspnet_baseline/realsense` with the detector-camera pair used by
+the selected paper configuration.
+
 ## Release Scope
 
 This repository contains GraRe source code, paper configurations, tests, and
@@ -234,7 +300,7 @@ do not proceed when its gate fails.
 | --- | --- | --- | --- |
 | 1 | Install and exercise the package | No | `grare-smoke` completes |
 | 2 | Download and place required assets | Downloads only | GraspNet, backbones, and detector checkpoints are present |
-| 3 | Build train/test features for one setting | GraspNet + detector dumps; GPU recommended | local archives and object-pooled sidecars exist |
+| 3 | Prepare three input assets for one setting | GraspNet + detector dumps; GPU recommended | local archives and object-pooled sidecars exist |
 | 4 | Reproduce one paper setting | Full assets + GPU | train, rerank, and evaluation artifacts exist |
 | 5 | Repeat the five reported settings | Full assets + GPU | all five configuration graphs complete |
 | 6 | Interpret the comparison | Complete official test evaluations | AP is compared with the reported table above |
@@ -262,67 +328,15 @@ continuing:
 source "$GRARE_ASSET_WORKSPACE/grare_paths.env"
 ```
 
-Generate candidate dumps separately before feature construction. If the dataset
-is stored elsewhere, pass `--graspnet-root`; use
+Generate candidate dumps as described in [Prepare](#prepare) before feature
+construction. If the dataset is stored elsewhere, pass `--graspnet-root`; use
 `./scripts/prepare_data_assets.sh --help` for all options.
 
-### 3. Build features for one paper setting
+### 3. Prepare three input assets for one paper setting
 
-GraRe starts from frozen-detector candidate dumps in GraspNet `(K, 17)` array
-format. It does not require detector source code during feature preparation,
-training, re-ranking, or evaluation. See [DATA_FORMAT.md](DATA_FORMAT.md) for
-the complete schema and directory layout. For the recommended first setting,
-put the train and test dumps under:
-
-```text
-$GRARE_DUMP_ROOT/graspnet_baseline/realsense/train/
-$GRARE_DUMP_ROOT/graspnet_baseline/realsense/test/
-```
-
-First generate the training archives and sidecar object clouds:
-
-```bash
-grare-prepare \
-  --input-root "$GRARE_DUMP_ROOT/graspnet_baseline/realsense/train" \
-  --input-format detector-dump \
-  --output-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/realsense/local_cloud/train" \
-  --object-cloud-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/realsense/object_cloud/train" \
-  --detector graspnet_baseline \
-  --benchmark graspnet \
-  --dataset-root "$GRASPNET_ROOT" \
-  --camera realsense \
-  --split train \
-  --cloud-sampler stratified_fps \
-  --shell-edges 0,0.005,0.015,0.025,0.040 \
-  --shell-budgets 64,128,128,192 \
-  --local-cloud-max-points 512 \
-  --object-cloud-points 512 \
-  --sam-checkpoint "$GRARE_SAM_CKPT" \
-  --omit-object-cloud
-```
-
-For a low-cost format check, append `--limit 1` to this command first. Then
-run it again without `--limit`. A successful full run writes a
-`manifest.jsonl` plus matching archives under `local_cloud/` and
-`object_cloud/`. Repeat the same command for the `test` input and output
-directories, changing only `train` to `test`.
-
-Next precompute the frozen Point-MAE features for the training split:
-
-```bash
-grare-precompute-object \
-  --archive-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/realsense/local_cloud/train" \
-  --object-cloud-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/realsense/object_cloud/train" \
-  --output-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/realsense/object_pooled/train" \
-  --pmae-ckpt "$GRARE_POINT_MAE_CKPT" \
-  --object-cloud-points 512 \
-  --device cuda
-```
-
-Repeat Point-MAE precomputation for the test split. Its `object_pooled/`
-sidecar is the Stage 3 completion gate. Analytical test labels are needed only
-by the official evaluator and analyses; they are not used for checkpoint
-selection.
+Follow [Prepare](#prepare) for candidate dumps, shell-wise local clouds, and
+Point-MAE object features. The `object_pooled/` sidecar is the Stage 3
+completion gate.
 
 ### 4. Reproduce one complete paper setting
 
