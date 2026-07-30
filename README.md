@@ -71,11 +71,6 @@ python -m pip install \
   "mobile-sam @ git+https://github.com/ChaoningZhang/MobileSAM.git"
 ```
 
-GraRe implements the required
-[Point-MAE](https://github.com/Pang-Yatian/Point-MAE) encoder internally in
-`grare/rescoring/point_mae.py`, so no separate Point-MAE source installation
-is needed. Download its pretrained weight in the next section.
-
 To regenerate frozen-detector candidate dumps, install the shared detector
 runtime and build dependencies. This requires a CUDA toolkit with `nvcc` that
 is compatible with the PyTorch build above:
