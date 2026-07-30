@@ -101,43 +101,46 @@ Start with `gn_realsense`: it has the shortest supported path and does not
 need mmap packing. The Kinect GN and EG settings require the additional
 packing step described in Stage 4.
 
-### 1. Install and validate the package
-
-Python 3.10 or newer is required. Install a PyTorch build compatible with the
-intended CUDA version before installing GraRe.
+### 1. Installation
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
+# Clone GraRe.
+git clone https://github.com/Minakanmi-Yuki/grare.git
+cd grare
+
+# Create the validated Conda environment.
+conda create -n grare python=3.12 -y
+conda activate grare
+
+# Install the PyTorch CUDA build used for this release.
 python -m pip install --upgrade pip
-python -m pip install -e '.[test]'
-grare-smoke
+python -m pip install \
+  --index-url https://download.pytorch.org/whl/cu130 \
+  torch==2.12.1+cu130 torchvision==0.27.1+cu130
+
+# Install GraRe, feature-construction, and test dependencies.
+python -m pip install -e '.[prepare,test]'
 ```
 
-`grare-smoke` uses generated inputs and checks a synthetic train → checkpoint
-reload → re-ranking loop. It needs neither a dataset, checkpoint, nor GPU.
-Run the unit suite before investing in full preprocessing:
+Confirm that the package is installed before downloading data:
 
 ```bash
+grare-smoke
 python -m pytest -q
 ```
 
-Feature construction additionally requires MobileSAM:
+Install the official GraspNet API and its `grasp_nms` extension only when
+running official AP evaluation:
 
 ```bash
-python -m pip install -e '.[prepare]'
+git clone https://github.com/graspnet/graspnetAPI ../graspnetAPI
+python -m pip install -e ../graspnetAPI
+python -m pip install grasp_nms
 ```
 
-Official GraspNet evaluation requires a separate installation of the public
-GraspNet API and its `grasp_nms` extension:
-
-```bash
-git clone https://github.com/graspnet/graspnetAPI /path/to/graspnetAPI
-python -m pip install -e /path/to/graspnetAPI
-```
-
-The other public upstream projects are listed in
-[DEPENDENCIES.md](DEPENDENCIES.md).
+For a different CUDA version, install the matching PyTorch wheel before
+`python -m pip install -e '.[prepare,test]'`. Other public upstream projects
+are listed in [DEPENDENCIES.md](DEPENDENCIES.md).
 
 ### 2. Download and place GraspNet-1Billion
 
