@@ -1,0 +1,135 @@
+--- external/EconomicGrasp/libs/MinkowskiEngine/src/3rdparty/concurrent_unordered_map.cuh
++++ external/EconomicGrasp/libs/MinkowskiEngine/src/3rdparty/concurrent_unordered_map.cuh
+@@ -26,6 +26,7 @@
+ #include <cudf/utilities/error.hpp>
+ 
+ #include <thrust/pair.h>
+ #include <thrust/count.h>
++#include <thrust/execution_policy.h>
+ 
+ #include <functional>
+@@ -145,10 +146,10 @@
+   /**
+    * @brief Factory to construct a new concurrent unordered map.
+    *
+-   * Returns a `std::unique_ptr` to a new concurrent unordered map object. The
++   * Returns a `std::shared_ptr` to a new concurrent unordered map object. The
+    * map is non-owning and trivially copyable and should be passed by value into
+-   * kernels. The `unique_ptr` contains a custom deleter that will free the
+-   * map's contents.
++   * kernels. The `shared_ptr` contains a custom deleter that will free the
++   * map's contents.
+    *
+    * @note The implementation of this unordered_map uses sentinel values to
+    * indicate an entry in the hash table that is empty, i.e., if a hash bucket
+@@ -185,7 +186,7 @@
+     // due to compiler bug: https://github.com/rapidsai/cudf/pull/5692
+     auto deleter = [stream](Self* p) { (*p).destroy(stream); };
+ 
+-    return std::unique_ptr<Self, std::function<void(Self*)>>{
++    return std::shared_ptr<Self>{
+       new Self(capacity, unused_element, unused_key, hash_function, equal, allocator, stream),
+       deleter};
+   }
+@@ -586,8 +587,16 @@
+       if (cudaSuccess == status && isPtrManaged(hashtbl_values_ptr_attributes)) {
+         int dev_id = 0;
+         CUDA_TRY(cudaGetDevice(&dev_id));
++#if defined(CUDART_VERSION) && CUDART_VERSION >= 12020
++        cudaMemLocation location{};
++        location.type = cudaMemLocationTypeDevice;
++        location.id = dev_id;
++        CUDA_TRY(
++          cudaMemPrefetchAsync(m_hashtbl_values, m_capacity * sizeof(value_type), location, 0, stream));
++#else
+         CUDA_TRY(
+           cudaMemPrefetchAsync(m_hashtbl_values, m_capacity * sizeof(value_type), dev_id, stream));
++#endif
+       }
+     }
+ 
+--- external/EconomicGrasp/libs/MinkowskiEngine/src/3rdparty/cudf/detail/nvtx/ranges.hpp
++++ external/EconomicGrasp/libs/MinkowskiEngine/src/3rdparty/cudf/detail/nvtx/ranges.hpp
+@@ -17,39 +17,7 @@
+ 
+ #pragma once
+ 
+-#include "nvtx3.hpp"
+-
+-namespace cudf {
+-/**
+- * @brief Tag type for libcudf's NVTX domain.
+- *
+- */
+-struct libcudf_domain {
+-  static constexpr char const* name{"libcudf"};  ///< Name of the libcudf domain
+-};
+-
+-/**
+- * @brief Alias for an NVTX range in the libcudf domain.
+- *
+- */
+-using thread_range = ::nvtx3::domain_thread_range<libcudf_domain>;
+-
+-}  // namespace cudf
+-
+-/**
+- * @brief Convenience macro for generating an NVTX range in the `libcudf` domain
+- * from the lifetime of a function.
+- *
+- * Uses the name of the immediately enclosing function returned by `__func__` to
+- * name the range.
+- *
+- * Example:
+- * ```
+- * void some_function(){
+- *    CUDF_FUNC_RANGE();
+- *    ...
+- * }
+- * ```
+- *
+- */
+-#define CUDF_FUNC_RANGE() NVTX3_FUNC_RANGE_IN(cudf::libcudf_domain)
++// CUDA 13 ships newer NVTX3 headers through CCCL. This vendored cuDF NVTX
++// wrapper collides with those definitions, and the ranges are profiling-only
++// for this MinkowskiEngine build.
++#define CUDF_FUNC_RANGE()
+--- external/EconomicGrasp/libs/MinkowskiEngine/src/coordinate_map_functors.cuh
++++ external/EconomicGrasp/libs/MinkowskiEngine/src/coordinate_map_functors.cuh
+@@ -106,8 +106,6 @@
+ };
+ 
+ template <typename coordinate_type, typename map_type>
+-struct find_coordinate
+-    : public thrust::unary_function<uint32_t,
+-                                    thrust::pair<uint32_t, uint32_t>> {
++struct find_coordinate {
+   using mapped_type = typename map_type::mapped_type;
+   using return_type = thrust::pair<mapped_type, mapped_type>;
+--- external/EconomicGrasp/libs/MinkowskiEngine/src/coordinate_map_gpu.cu
++++ external/EconomicGrasp/libs/MinkowskiEngine/src/coordinate_map_gpu.cu
+@@ -35,7 +35,9 @@
+ #include <thrust/execution_policy.h>
+ #include <thrust/iterator/counting_iterator.h>
+ #include <thrust/iterator/transform_iterator.h>
++#include <thrust/remove.h>
+ #include <thrust/sort.h>
++#include <thrust/unique.h>
+ 
+ namespace minkowski {
+ 
+--- external/EconomicGrasp/libs/MinkowskiEngine/src/spmm.cu
++++ external/EconomicGrasp/libs/MinkowskiEngine/src/spmm.cu
+@@ -28,6 +28,12 @@
+ #include "math_functions.cuh"
+ 
+ #include <cusparse.h>
++#include <thrust/execution_policy.h>
++#include <thrust/iterator/zip_iterator.h>
++#include <thrust/reduce.h>
++#include <thrust/sort.h>
++#include <thrust/system_error.h>
++#include <thrust/tuple.h>
+ 
+ #include <ATen/core/Tensor.h>
+ #include <ATen/cuda/CUDAContext.h>

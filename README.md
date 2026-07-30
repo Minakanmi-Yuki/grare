@@ -66,6 +66,41 @@ python -m pip install \
 python -m pip install -e '.[prepare,test]'
 ```
 
+### Detector sources and CUDA extensions
+
+This step is required only to regenerate frozen-detector candidate dumps from
+GraspNet-1Billion. It requires a CUDA toolkit with `nvcc` that is compatible
+with the PyTorch build above.
+
+```bash
+# Shared runtime and EconomicGrasp build dependencies.
+conda install -y -c anaconda openblas-devel
+conda install -y -c conda-forge ninja
+python -m pip install tensorboard open3d Pillow
+
+# Clone the detector revisions used by this release.
+mkdir -p external
+git clone https://github.com/graspnet/graspnet-baseline external/graspnet-baseline
+git clone https://github.com/mahaoxiang822/Scale-Balanced-Grasp external/Scale-Balanced-Grasp
+git clone https://github.com/iSEE-Laboratory/EconomicGrasp external/EconomicGrasp
+git -C external/graspnet-baseline checkout 280c215129f759ed8649cb4e89fc5dfee55f4f80
+git -C external/Scale-Balanced-Grasp checkout 995d6f892474c91fbfcdf58f7d79589be4cbb41c
+git -C external/EconomicGrasp checkout 4119bdcd6bf5d3712a110f78ca87504dd359eec0
+
+# Build the GN/SBG PointNet2 and KNN extensions and the EconomicGrasp
+# MinkowskiEngine, PointNet2, and KNN extensions.
+./scripts/build_detector_extensions.sh
+
+# Verify every compiled extension import before generating detector dumps.
+./scripts/verify_detector_extensions.sh
+```
+
+The build script applies the included CUDA 13 compatibility patch to the
+vendored EconomicGrasp MinkowskiEngine and reuses the GraspNet-Baseline KNN
+extension for Scale-Balanced-Grasp on PyTorch 2.x. Do not install the upstream
+Scale-Balanced-Grasp `requirements.txt`, which pins an incompatible historic
+PyTorch release.
+
 Install the official [GraspNet API](https://github.com/graspnet/graspnetAPI)
 and its `grasp_nms` extension only when running official AP evaluation:
 

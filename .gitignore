@@ -9,6 +9,7 @@ dist/
 outputs/
 data/
 grare-assets/
+external/
 checkpoints/
 *.npy
 *.npz
