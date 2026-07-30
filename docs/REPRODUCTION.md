@@ -23,9 +23,10 @@ official projects and licenses are listed in [../DEPENDENCIES.md](../DEPENDENCIE
 Create the local asset workspace (this does not download data):
 
 ```bash
+export GRARE_ASSET_WORKSPACE=/path/to/grare-assets
 ./scripts/prepare_data_assets.sh \
-  --workspace "$PWD/grare-assets"
-source "$PWD/grare-assets/grare_paths.env"
+  --workspace "$GRARE_ASSET_WORKSPACE"
+source "$GRARE_ASSET_WORKSPACE/grare_paths.env"
 ```
 
 Download the original dataset from the
@@ -52,7 +53,7 @@ feature-construction input set:
 
 ```bash
 ./scripts/prepare_data_assets.sh \
-  --workspace "$PWD/grare-assets" \
+  --workspace "$GRARE_ASSET_WORKSPACE" \
   --download-backbones \
   --check
 ```

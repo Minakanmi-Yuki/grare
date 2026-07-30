@@ -130,11 +130,13 @@ candidate dumps, and the MobileSAM and Point-MAE backbone weights. Create the
 asset workspace and write its path configuration. This command does not
 download any assets. The following `source` command loads the resulting
 `GRASPNET_ROOT`, `GRARE_DUMP_ROOT`, and related variables into the current
-shell:
+shell. Set `GRARE_ASSET_WORKSPACE` to any writable directory, such as a data
+disk:
 
 ```bash
-./scripts/prepare_data_assets.sh --workspace "$PWD/grare-assets"
-source "$PWD/grare-assets/grare_paths.env"
+export GRARE_ASSET_WORKSPACE=/path/to/grare-assets
+./scripts/prepare_data_assets.sh --workspace "$GRARE_ASSET_WORKSPACE"
+source "$GRARE_ASSET_WORKSPACE/grare_paths.env"
 ```
 
 Download GraspNet-1Billion from the
@@ -147,7 +149,7 @@ expected by GraRe:
 
 ```bash
 ./scripts/prepare_data_assets.sh \
-  --workspace "$PWD/grare-assets" \
+  --workspace "$GRARE_ASSET_WORKSPACE" \
   --download-backbones
 ```
 
@@ -197,7 +199,7 @@ assets required for feature construction are present before continuing:
 
 ```bash
 ./scripts/prepare_data_assets.sh \
-  --workspace "$PWD/grare-assets" \
+  --workspace "$GRARE_ASSET_WORKSPACE" \
   --check
 ```
 
@@ -273,9 +275,9 @@ dumps, and backbone weights. Source the generated environment file and verify
 the complete feature-construction input set:
 
 ```bash
-source "$PWD/grare-assets/grare_paths.env"
+source "$GRARE_ASSET_WORKSPACE/grare_paths.env"
 ./scripts/prepare_data_assets.sh \
-  --workspace "$PWD/grare-assets" \
+  --workspace "$GRARE_ASSET_WORKSPACE" \
   --check
 ```
 
@@ -355,7 +357,8 @@ The package provides five main configurations:
 
 Every configuration uses batch size `2048`. The environment variables were
 written in Stage 2; load them with
-`source "$PWD/grare-assets/grare_paths.env"` before invoking a configuration.
+`source "$GRARE_ASSET_WORKSPACE/grare_paths.env"` before invoking a
+configuration.
 
 The Kinect GN and EG configurations use mmap-packed training features to
 preserve the reported 2048-candidate batch construction. Build the matching
