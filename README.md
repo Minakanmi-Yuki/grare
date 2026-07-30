@@ -41,22 +41,9 @@ the predicted quality with detector confidence for final ranking.
 
 ## Environment
 
-The following environment was used to validate this release. The package
-declares lower bounds in [pyproject.toml](pyproject.toml); use this table when
-matching the tested software stack.
+Ubuntu 22.04.5 LTS · Python 3.12.3 · PyTorch 2.12.1+cu130 (CUDA 13.0)
 
-| Component | Version |
-| --- | --- |
-| Operating system | Ubuntu 22.04.5 LTS |
-| Python | 3.12.3 |
-| PyTorch | 2.12.1+cu130 |
-| CUDA runtime reported by PyTorch | 13.0 |
-| NumPy | 2.4.6 |
-| SciPy | 1.18.0 |
-| PyYAML | 6.0.3 |
-| OpenCV (`opencv-python-headless`) | 4.13.0.92 |
-| timm | 1.0.27 |
-| MobileSAM | 1.0 |
+NumPy 2.4.6 · SciPy 1.18.0 · PyYAML 6.0.3 · OpenCV 4.13.0.92 · timm 1.0.27 · MobileSAM 1.0
 
 ## Release Scope
 
