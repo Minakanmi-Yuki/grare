@@ -1,7 +1,7 @@
 # GraRe: Grasp Candidate Re-Ranking for Frozen 6-DoF Grasp Detectors
 
 <p align="center">
-  Jibao Yuan · Yuhui Zhao · Yinzhen Lv · Chao Xu · Shun Li · Chenxi Deng · Shaofei Chen
+  Jibao Yuan · Yuhui Zhao · Yinzhen Lv · Chao Xu · Shun Li · Chenxi Deng · Shaofei Chen*
 </p>
 
 ## Abstract
