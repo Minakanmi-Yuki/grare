@@ -121,22 +121,49 @@ environment file for the paper configurations:
 source "$PWD/grare-assets/grare_paths.env"
 ```
 
-The workspace separates `graspnet/`, `detector_dumps/`, `backbones/`,
-`grare_data/`, and `grare_output/`. The script downloads only the public
-MobileSAM and Point-MAE checkpoints. Download GraspNet-1Billion and produce
-the frozen-detector dumps with the original public projects listed in
-[DEPENDENCIES.md](DEPENDENCIES.md); neither asset is redistributed here.
+The workspace separates `graspnet/`, `detector_checkpoints/`,
+`detector_dumps/`, `backbones/`, `grare_data/`, and `grare_output/`. The
+script downloads only the public MobileSAM and Point-MAE checkpoints.
 
-After placing those two assets in the workspace (or providing their existing
-locations explicitly), validate the setup before preprocessing:
+For a full reconstruction from raw data, the external asset inventory is:
+
+| Asset | Required by GraRe feature construction | Required to regenerate detector dumps |
+| --- | --- | --- |
+| GraspNet-1Billion | Yes | Yes |
+| MobileSAM and Point-MAE checkpoints | Yes | No |
+| Five detector-setting checkpoint directories | No, after dumps exist | Yes |
+| Five train/test candidate-dump sets | Yes | Produced from the preceding row |
+
+The five checkpoint and dump settings are `gn_realsense`, `gn_kinect`,
+`sbg_realsense`, `eg_realsense`, and `eg_kinect`. They correspond to three
+upstream detector families: GraspNet-Baseline, Scale-Balanced-Grasp, and
+EconomicGrasp. GraRe does not load detector checkpoints once their candidate
+dumps have been produced. Obtain all third-party assets from the original
+public projects listed in [DEPENDENCIES.md](DEPENDENCIES.md); none is
+redistributed here.
+
+For the recommended first setting, validate GraspNet, both public backbones,
+and the GN-RealSense train/test dumps before preprocessing:
 
 ```bash
 ./scripts/prepare_data_assets.sh \
   --workspace "$PWD/grare-assets" \
   --graspnet-root /path/to/graspnet \
   --detector-dumps /path/to/frozen-detector-dumps \
+  --setting gn_realsense \
   --check
 source "$PWD/grare-assets/grare_paths.env"
+```
+
+For an audit that all five paper settings can be regenerated from raw assets,
+also provide the detector-checkpoint root and run:
+
+```bash
+./scripts/prepare_data_assets.sh \
+  --workspace "$PWD/grare-assets" \
+  --all-paper-settings \
+  --require-detector-checkpoints \
+  --check
 ```
 
 Use `./scripts/prepare_data_assets.sh --help` for all options. Review each
@@ -263,7 +290,9 @@ completing GN-RealSense, run every main-result configuration sequentially:
 
 Use `./scripts/run_paper_configs.sh --dry-run` to inspect all five command
 graphs. Use `--set train.seed=11` for a different initialization seed. Test
-AP is not used for model or hyperparameter selection.
+AP is not used for model or hyperparameter selection. Detector checkpoints
+are not read at this stage: all five candidate-dump sets must already have
+been prepared.
 
 ### 6. Compare and understand the results
 

@@ -29,12 +29,16 @@ checkpoints:
 
 Download GraspNet-1Billion from its original public source, subject to its
 terms, and place it under `grare-assets/graspnet/` (or retain it elsewhere).
-Run each frozen detector using its upstream implementation and retain its raw
-`(K, 17)` candidate dump for every frame under
-`grare-assets/detector_dumps/` (or retain it elsewhere). GraRe never changes
-candidate identities, poses, widths, or candidate-set size. The exact dump
-contract is in [../DATA_FORMAT.md](../DATA_FORMAT.md). The corresponding
-upstream projects are listed in [../DEPENDENCIES.md](../DEPENDENCIES.md).
+For a full reconstruction from raw data, also obtain the five detector-setting
+checkpoints (`gn_realsense`, `gn_kinect`, `sbg_realsense`, `eg_realsense`, and
+`eg_kinect`) from the three original detector projects. Use those checkpoints
+to run each frozen detector and retain its raw `(K, 17)` candidate dump for
+every frame under `grare-assets/detector_dumps/` (or retain the dumps
+elsewhere). GraRe never changes candidate identities, poses, widths, or
+candidate-set size; once the dumps exist, detector checkpoints are no longer
+needed by GraRe. The exact dump contract is in
+[../DATA_FORMAT.md](../DATA_FORMAT.md). The corresponding upstream projects
+are listed in [../DEPENDENCIES.md](../DEPENDENCIES.md).
 
 When both assets are available, validate the workspace and load the generated
 environment variables:
@@ -44,9 +48,13 @@ environment variables:
   --workspace "$PWD/grare-assets" \
   --graspnet-root /path/to/graspnet \
   --detector-dumps /path/to/frozen-detector-dumps \
+  --setting gn_realsense \
   --check
 source "$PWD/grare-assets/grare_paths.env"
 ```
+
+Use `--all-paper-settings --require-detector-checkpoints --check` to audit
+all five raw-data reconstruction paths before generating the paper dumps.
 
 ## 3. Construct features
 
