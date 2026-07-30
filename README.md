@@ -139,9 +139,9 @@ Manually download GraspNet-1Billion from the
 [official GraspNet page](https://graspnet.net/datasets.html), then extract the
 archives to `$GRASPNET_ROOT` (default:
 `$GRARE_ASSET_WORKSPACE/graspnet`). Then download the public
-[MobileSAM](https://github.com/ChaoningZhang/MobileSAM) and
-[Point-MAE](https://github.com/Pang-Yatian/Point-MAE) weights into the names
-expected by GraRe:
+[MobileSAM weight](https://huggingface.co/dhkim2810/MobileSAM) and
+[Point-MAE weight](https://github.com/Pang-Yatian/Point-MAE/releases/tag/main)
+into the names expected by GraRe:
 
 ```bash
 ./scripts/prepare_data_assets.sh \
