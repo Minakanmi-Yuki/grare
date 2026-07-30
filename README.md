@@ -47,6 +47,8 @@ NumPy 2.4.6 · SciPy 1.18.0 · PyYAML 6.0.3 · OpenCV 4.13.0.92 · timm 1.0.27 �
 
 ## Installation
 
+### GraRe environment and dependencies
+
 ```bash
 # Clone GraRe.
 git clone https://github.com/Minakanmi-Yuki/grare.git
@@ -100,6 +102,8 @@ vendored EconomicGrasp MinkowskiEngine and reuses the GraspNet-Baseline KNN
 extension for Scale-Balanced-Grasp on PyTorch 2.x. Do not install the upstream
 Scale-Balanced-Grasp `requirements.txt`, which pins an incompatible historic
 PyTorch release.
+
+### Official GraspNet evaluation
 
 Install the official [GraspNet API](https://github.com/graspnet/graspnetAPI)
 and its `grasp_nms` extension only when running official AP evaluation:
