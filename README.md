@@ -125,9 +125,9 @@ are listed in [DEPENDENCIES.md](DEPENDENCIES.md).
 
 ## Downloads
 
-GraRe requires the original GraspNet-1Billion dataset, frozen detector
-candidate dumps, and the MobileSAM and Point-MAE backbone weights. Set the
-asset directory, then initialize its paths; this does not download assets:
+GraRe requires the original GraspNet-1Billion dataset, detector checkpoints,
+and the MobileSAM and Point-MAE backbone weights. Set the asset directory,
+then initialize its paths; this does not download assets:
 
 ```bash
 export GRARE_ASSET_WORKSPACE=/path/to/grare-assets
@@ -156,64 +156,29 @@ checkpoints: [GN RealSense](https://drive.google.com/file/d/1hd0G8LN6tRpi4742XOT
 and the [EG v1 release](https://github.com/iSEE-Laboratory/EconomicGrasp/releases/tag/v1)
 for both cameras. Place them under `$GRARE_DETECTOR_CKPT_ROOT` as shown below.
 
-Generate raw candidate dumps with
-[GraspNet-Baseline](https://github.com/graspnet/graspnet-baseline),
-[Scale-Balanced-Grasp](https://github.com/mahaoxiang822/Scale-Balanced-Grasp),
-and [EconomicGrasp](https://github.com/iSEE-Laboratory/EconomicGrasp) using
-their publicly released weights, then place the dumps under `$GRARE_DUMP_ROOT`.
-GraRe reads the `(K, 17)` `.npy` files, rather than detector checkpoints
-themselves. The complete directory contract is:
+The downloaded assets should be arranged as follows:
 
 ```text
-grare-assets/
-  graspnet/
-    scenes/
-      scene_0000/
-      ...
-    models/
-  detector_checkpoints/
-    graspnet_baseline/
-      checkpoint-rs.tar
-      checkpoint-kn.tar
-    scale_balanced_grasp/
-      log_full_model/checkpoint.tar
-    economicgrasp/
-      economicgrasp_realsense.tar
-      economicgrasp_kinect.tar
-  detector_dumps/
-    graspnet_baseline/
-      realsense/
-        train/scene_0000/realsense/0000.npy
-        test/scene_0100/realsense/0000.npy
-      kinect/
-        train/scene_0000/kinect/0000.npy
-        test/scene_0100/kinect/0000.npy
-    scale_balanced_grasp/
-      realsense/
-        train/scene_0000/realsense/0000.npy
-        test/scene_0100/realsense/0000.npy
-    economicgrasp/
-      realsense/
-        train/scene_0000/realsense/0000.npy
-        test/scene_0100/realsense/0000.npy
-      kinect/
-        train/scene_0000/kinect/0000.npy
-        test/scene_0100/kinect/0000.npy
-  backbones/
-    mobile_sam.pt
-    point_mae_pretrain.pth
+$GRARE_ASSET_WORKSPACE/
+├── graspnet/                                      GraspNet-1Billion
+│   ├── scenes/
+│   └── models/
+├── detector_checkpoints/                          frozen detector weights
+│   ├── graspnet_baseline/
+│   │   ├── checkpoint-rs.tar                       GN RealSense
+│   │   └── checkpoint-kn.tar                       GN Kinect
+│   ├── scale_balanced_grasp/
+│   │   └── log_full_model/checkpoint.tar           SBG RealSense
+│   └── economicgrasp/
+│       ├── economicgrasp_realsense.tar             EG RealSense
+│       └── economicgrasp_kinect.tar                EG Kinect
+└── backbones/                                     frozen feature backbones
+    ├── mobile_sam.pt
+    └── point_mae_pretrain.pth
 ```
 
-The five detector-camera entries above correspond to the five paper
-configurations. Detector checkpoint locations remain under their respective
-upstream projects; GraRe needs only the generated dumps. Confirm that the
-assets required for feature construction are present before continuing:
-
-```bash
-./scripts/prepare_data_assets.sh \
-  --workspace "$GRARE_ASSET_WORKSPACE" \
-  --check
-```
+The five detector-camera checkpoints above correspond to the five paper
+configurations.
 
 ## Release Scope
 
@@ -261,7 +226,7 @@ do not proceed when its gate fails.
 | Stage | Goal | Needs external data or GPU? | Completion gate |
 | --- | --- | --- | --- |
 | 1 | Install and exercise the package | No | `grare-smoke` completes |
-| 2 | Download and place required assets | Downloads only | `prepare_data_assets.sh --check` passes |
+| 2 | Download and place required assets | Downloads only | GraspNet, backbones, and detector checkpoints are present |
 | 3 | Build train/test features for one setting | GraspNet + detector dumps; GPU recommended | local archives and object-pooled sidecars exist |
 | 4 | Reproduce one paper setting | Full assets + GPU | train, rerank, and evaluation artifacts exist |
 | 5 | Repeat the five reported settings | Full assets + GPU | all five configuration graphs complete |
@@ -280,22 +245,19 @@ grare-smoke
 python -m pytest -q
 ```
 
-### 2. Download and place GraspNet-1Billion
+### 2. Download and place assets
 
 Follow [Downloads](#downloads) to acquire and place the dataset, detector
-dumps, and backbone weights. Source the generated environment file and verify
-the complete feature-construction input set:
+checkpoints, and backbone weights. Source the generated environment file before
+continuing:
 
 ```bash
 source "$GRARE_ASSET_WORKSPACE/grare_paths.env"
-./scripts/prepare_data_assets.sh \
-  --workspace "$GRARE_ASSET_WORKSPACE" \
-  --check
 ```
 
-If the dataset or candidate dumps are stored elsewhere, pass `--graspnet-root`
-or `--detector-dumps`; use `./scripts/prepare_data_assets.sh --help` for all
-options.
+Generate candidate dumps separately before feature construction. If the dataset
+is stored elsewhere, pass `--graspnet-root`; use
+`./scripts/prepare_data_assets.sh --help` for all options.
 
 ### 3. Build features for one paper setting
 
