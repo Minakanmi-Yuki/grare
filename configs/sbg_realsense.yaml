@@ -1,0 +1,12 @@
+extends: _base.yaml
+name: sbg_realsense
+detector: scale_balanced_grasp
+camera: realsense
+paths:
+  local_cloud_train: ${GRARE_DATA_ROOT}/relabeled/scale_balanced_grasp/realsense/local_cloud/train
+  local_cloud_test: ${GRARE_DATA_ROOT}/relabeled/scale_balanced_grasp/realsense/local_cloud/test
+  object_pooled_train: ${GRARE_DATA_ROOT}/relabeled/scale_balanced_grasp/realsense/object_pooled/train
+  object_pooled_test: ${GRARE_DATA_ROOT}/relabeled/scale_balanced_grasp/realsense/object_pooled/test
+  checkpoint_dir: ${GRARE_OUTPUT_ROOT}/checkpoints/sbg_realsense
+  rerank_dir: ${GRARE_OUTPUT_ROOT}/predictions/sbg_realsense
+  eval_dir: ${GRARE_OUTPUT_ROOT}/evaluation/sbg_realsense

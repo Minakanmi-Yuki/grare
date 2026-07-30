@@ -1,0 +1,57 @@
+name: REQUIRED_OVERRIDE
+detector: REQUIRED_OVERRIDE
+camera: REQUIRED_OVERRIDE
+
+paths:
+  graspnet_root: ${GRASPNET_ROOT}
+  local_cloud_train: ${GRARE_DATA_ROOT}/relabeled/REQUIRED_OVERRIDE/REQUIRED_OVERRIDE/local_cloud/train
+  local_cloud_test: ${GRARE_DATA_ROOT}/relabeled/REQUIRED_OVERRIDE/REQUIRED_OVERRIDE/local_cloud/test
+  object_pooled_train: ${GRARE_DATA_ROOT}/relabeled/REQUIRED_OVERRIDE/REQUIRED_OVERRIDE/object_pooled/train
+  object_pooled_test: ${GRARE_DATA_ROOT}/relabeled/REQUIRED_OVERRIDE/REQUIRED_OVERRIDE/object_pooled/test
+  point_mae_checkpoint: ${GRARE_POINT_MAE_CKPT}
+  checkpoint_dir: ${GRARE_OUTPUT_ROOT}/checkpoints/REQUIRED_OVERRIDE
+  rerank_dir: ${GRARE_OUTPUT_ROOT}/predictions/REQUIRED_OVERRIDE
+  eval_dir: ${GRARE_OUTPUT_ROOT}/evaluation/REQUIRED_OVERRIDE
+
+feature_construction:
+  retained_candidates: all
+  voxel_size_m: 0.008
+  shell_edges_m: [0.0, 0.005, 0.015, 0.025, 0.040]
+  shell_budgets: [64, 128, 128, 192]
+  local_points: 512
+  object_points: 512
+  sam_prompt_cluster_radius_m: 0.03
+  sam_min_area_pixels: 200
+  sam_max_area_ratio: 0.4
+
+train:
+  batch_size: 2048
+  val_ratio: 0.1
+  val_split_seed: 7
+  min_epochs: 20
+  max_epochs: 40
+  min_optimizer_steps: 0
+  min_checkpoint_steps: 0
+  early_stop_patience: 10
+  lr: 0.0002
+  weight_decay: 0.0001
+  grad_clip_norm: 1.0
+  scheduler_patience: 4
+  scheduler_factor: 0.7
+  scheduler_min_lr: 0.00001
+  scheduler_warmup_steps: 0
+  checkpoint_interval_steps: 0
+  resume_from: null
+  seed: 7
+  num_workers: 8
+  device: cuda
+  amp: auto
+
+rerank:
+  lambda: 1.0
+  score_normalization: zscore
+  num_workers: 1
+  device: cuda
+
+eval:
+  proc: 16

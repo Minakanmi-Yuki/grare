@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "grare"
+version = "1.0.0"
+description = "Grasp candidate re-ranking for frozen 6-DoF grasp detectors"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+dependencies = [
+    "numpy>=1.23",
+    "scipy>=1.10",
+    "tqdm>=4.66",
+    "opencv-python-headless>=4.8",
+    "torch>=2.5",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+prepare = ["mobile-sam @ git+https://github.com/ChaoningZhang/MobileSAM.git", "timm>=0.9"]
+test = ["pytest>=7"]
+
+[project.scripts]
+grare-run = "grare.cli.run:main"
+grare-prepare = "grare.cli.prepare:main"
+grare-precompute-object = "grare.cli.precompute_object:main"
+grare-pack = "grare.cli.pack:main"
+grare-train = "grare.cli.train:main"
+grare-rerank = "grare.cli.rerank:main"
+grare-evaluate = "grare.cli.evaluate:main"
+grare-smoke = "grare.cli.smoke:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["grare*"]
+
+[tool.setuptools.package-data]
+grare = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

@@ -1,0 +1,12 @@
+extends: _base.yaml
+name: gn_realsense
+detector: graspnet_baseline
+camera: realsense
+paths:
+  local_cloud_train: ${GRARE_DATA_ROOT}/relabeled/graspnet_baseline/realsense/local_cloud/train
+  local_cloud_test: ${GRARE_DATA_ROOT}/relabeled/graspnet_baseline/realsense/local_cloud/test
+  object_pooled_train: ${GRARE_DATA_ROOT}/relabeled/graspnet_baseline/realsense/object_pooled/train
+  object_pooled_test: ${GRARE_DATA_ROOT}/relabeled/graspnet_baseline/realsense/object_pooled/test
+  checkpoint_dir: ${GRARE_OUTPUT_ROOT}/checkpoints/gn_realsense
+  rerank_dir: ${GRARE_OUTPUT_ROOT}/predictions/gn_realsense
+  eval_dir: ${GRARE_OUTPUT_ROOT}/evaluation/gn_realsense

@@ -1,0 +1,12 @@
+extends: _base.yaml
+name: eg_realsense
+detector: economicgrasp
+camera: realsense
+paths:
+  local_cloud_train: ${GRARE_DATA_ROOT}/relabeled/economicgrasp/realsense/local_cloud/train
+  local_cloud_test: ${GRARE_DATA_ROOT}/relabeled/economicgrasp/realsense/local_cloud/test
+  object_pooled_train: ${GRARE_DATA_ROOT}/relabeled/economicgrasp/realsense/object_pooled/train
+  object_pooled_test: ${GRARE_DATA_ROOT}/relabeled/economicgrasp/realsense/object_pooled/test
+  checkpoint_dir: ${GRARE_OUTPUT_ROOT}/checkpoints/eg_realsense
+  rerank_dir: ${GRARE_OUTPUT_ROOT}/predictions/eg_realsense
+  eval_dir: ${GRARE_OUTPUT_ROOT}/evaluation/eg_realsense

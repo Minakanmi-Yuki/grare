@@ -1,0 +1,26 @@
+extends: _base.yaml
+name: gn_kinect
+detector: graspnet_baseline
+camera: kinect
+paths:
+  local_cloud_train: ${GRARE_DATA_ROOT}/relabeled/graspnet_baseline/kinect/local_cloud/train
+  local_cloud_test: ${GRARE_DATA_ROOT}/relabeled/graspnet_baseline/kinect/local_cloud/test
+  object_pooled_train: ${GRARE_DATA_ROOT}/relabeled/graspnet_baseline/kinect/object_pooled/train
+  object_pooled_test: ${GRARE_DATA_ROOT}/relabeled/graspnet_baseline/kinect/object_pooled/test
+  checkpoint_dir: ${GRARE_OUTPUT_ROOT}/checkpoints/gn_kinect
+  rerank_dir: ${GRARE_OUTPUT_ROOT}/predictions/gn_kinect
+  eval_dir: ${GRARE_OUTPUT_ROOT}/evaluation/gn_kinect
+  packed_train: ${GRARE_DATA_ROOT}/packed/graspnet_baseline/kinect/train
+train:
+  max_epochs: 80
+  min_optimizer_steps: 50000
+  min_checkpoint_steps: 20000
+  early_stop_patience: 15
+  scheduler_patience: 8
+  scheduler_min_lr: 0.000001
+  scheduler_warmup_steps: 30000
+  checkpoint_interval_steps: 5000
+  local_health_max_batches: 4
+  local_health_seed: 20260710
+  min_local_raw_rms: 0.05
+  min_local_shuffle_ratio: 0.05
