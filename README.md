@@ -180,6 +180,13 @@ $GRARE_ASSET_WORKSPACE/
 The five detector-camera checkpoints above correspond to the five paper
 configurations.
 
+Verify that all downloaded assets are in place before generating candidate
+dumps:
+
+```bash
+./scripts/check_downloaded_assets.sh
+```
+
 ## Release Scope
 
 This repository contains GraRe source code, paper configurations, tests, and
