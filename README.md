@@ -59,12 +59,16 @@ python -m pip install --upgrade pip
 python -m pip install \
   --index-url https://download.pytorch.org/whl/cu130 \
   torch==2.12.1+cu130 torchvision==0.27.1+cu130
-python -m pip install -e '.[prepare,test]'
+python -m pip install -e .
+python -m pip install \
+  "mobile-sam @ git+https://github.com/ChaoningZhang/MobileSAM.git" \
+  "timm>=0.9" \
+  "pytest>=7"
 ```
 
-The `prepare` extra installs
-[MobileSAM](https://github.com/ChaoningZhang/MobileSAM) and `timm`. GraRe
-implements the required
+The feature-construction dependency
+[MobileSAM](https://github.com/ChaoningZhang/MobileSAM) is installed directly
+from its public repository. GraRe implements the required
 [Point-MAE](https://github.com/Pang-Yatian/Point-MAE) encoder internally, so
 no separate Point-MAE source checkout is needed; its pretrained weight is
 downloaded in the next section.
