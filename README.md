@@ -127,7 +127,10 @@ are listed in [DEPENDENCIES.md](DEPENDENCIES.md).
 
 GraRe requires the original GraspNet-1Billion dataset, frozen detector
 candidate dumps, and the MobileSAM and Point-MAE backbone weights. Create the
-asset workspace and load the paths used by the paper configurations:
+asset workspace and write its path configuration. This command does not
+download any assets. The following `source` command loads the resulting
+`GRASPNET_ROOT`, `GRARE_DUMP_ROOT`, and related variables into the current
+shell:
 
 ```bash
 ./scripts/prepare_data_assets.sh --workspace "$PWD/grare-assets"
