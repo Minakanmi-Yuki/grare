@@ -8,6 +8,7 @@ build/
 dist/
 outputs/
 data/
+grare-assets/
 checkpoints/
 *.npy
 *.npz

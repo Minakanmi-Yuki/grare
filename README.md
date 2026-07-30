@@ -52,33 +52,25 @@ gain summary.
 | EconomicGrasp | Detector | 63.75 | 52.43 | 19.61 | 45.26 |
 | EconomicGrasp | **GraRe** | **69.90** | **58.00** | **22.04** | **49.98** |
 
-## Reproducibility Guide
+## Reproduce GraRe Step by Step
 
-- [Paper configurations](configs/README.md) map the five reported settings to
-  runnable YAML files.
-- [Offline reproduction](docs/REPRODUCTION.md) documents the complete
-  `prepare → precompute → train → rerank → evaluate` workflow.
-- [Expected benchmark results](docs/RESULTS.md) records the reported
-  GraspNet-1Billion values and what constitutes a valid comparison.
-- [Real-robot results](docs/REAL_ROBOT_RESULTS.md) presents the physical
-  evaluation as result evidence only; this repository does not provide a
-  robot-control reproduction stack.
+Work through the following stages in order. Each stage has a completion gate;
+do not proceed when its gate fails.
 
-## Method Components
+| Stage | Goal | Needs external data or GPU? | Completion gate |
+| --- | --- | --- | --- |
+| 1 | Install and exercise the package | No | `grare-smoke` completes |
+| 2 | Create and validate the asset workspace | Downloads only for public backbones | `prepare_data_assets.sh --check` passes |
+| 3 | Build train/test features for one setting | GraspNet + detector dumps; GPU recommended | local archives and object-pooled sidecars exist |
+| 4 | Reproduce one paper setting | Full assets + GPU | train, rerank, and evaluation artifacts exist |
+| 5 | Repeat the five reported settings | Full assets + GPU | all five configuration graphs complete |
+| 6 | Interpret the comparison | Complete official test evaluations | AP is compared with the reported table above |
 
-- Candidate features: pose, gripper width, and detector confidence.
-- Local features: four radial shells with boundaries `(0, 5, 15, 25, 40)` mm
-  and per-shell FPS budgets `(64, 128, 128, 192)`.
-- Object context: MobileSAM mask prompting followed by a frozen Point-MAE
-  encoder and a trainable projection adapter.
-- Conditioning and fusion: candidate-conditioned FiLM for local and object
-  features, followed by a three-token Transformer.
-- Objective: continuous friction-margin quality prediction with collision,
-  empty-grasp, and object-classification auxiliary losses.
-- Re-ranking: candidate-set z-score normalization and score fusion with
-  `lambda = 1.0` in the paper configurations.
+Start with `gn_realsense`: it has the shortest supported path and does not
+need mmap packing. The Kinect GN and EG settings require the additional
+packing step described in Stage 4.
 
-## Installation
+### 1. Install and validate the package
 
 Python 3.10 or newer is required. Install a PyTorch build compatible with the
 intended CUDA version before installing GraRe.
@@ -89,6 +81,14 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e '.[test]'
 grare-smoke
+```
+
+`grare-smoke` uses generated inputs and checks a synthetic train → checkpoint
+reload → re-ranking loop. It needs neither a dataset, checkpoint, nor GPU.
+Run the unit suite before investing in full preprocessing:
+
+```bash
+python -m pytest -q
 ```
 
 Feature construction additionally requires MobileSAM:
@@ -108,7 +108,7 @@ python -m pip install -e /path/to/graspnetAPI
 The other public upstream projects are listed in
 [DEPENDENCIES.md](DEPENDENCIES.md).
 
-## Data Assets
+### 2. Create and validate the data-asset workspace
 
 Run the following once from the repository root to create a local asset
 workspace, download the two public backbone checkpoints, and generate an
@@ -143,24 +143,30 @@ Use `./scripts/prepare_data_assets.sh --help` for all options. Review each
 upstream license before downloading, using, or redistributing third-party
 assets.
 
-## Input Contract
+### 3. Build features for one paper setting
 
 GraRe starts from frozen-detector candidate dumps in GraspNet `(K, 17)` array
 format. It does not require detector source code during feature preparation,
 training, re-ranking, or evaluation. See [DATA_FORMAT.md](DATA_FORMAT.md) for
-the complete schema and directory layout.
+the complete schema and directory layout. For the recommended first setting,
+put the train and test dumps under:
 
-Generate labels and shell-stratified local/object features from detector dumps:
+```text
+$GRARE_DUMP_ROOT/graspnet_baseline/realsense/train/
+$GRARE_DUMP_ROOT/graspnet_baseline/realsense/test/
+```
+
+First generate the training archives and sidecar object clouds:
 
 ```bash
 grare-prepare \
-  --input-root /path/to/detector/dumps/train \
+  --input-root "$GRARE_DUMP_ROOT/graspnet_baseline/realsense/train" \
   --input-format detector-dump \
-  --output-root /path/to/grare-data/relabeled/graspnet_baseline/realsense/local_cloud/train \
-  --object-cloud-root /path/to/grare-data/relabeled/graspnet_baseline/realsense/object_cloud/train \
+  --output-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/realsense/local_cloud/train" \
+  --object-cloud-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/realsense/object_cloud/train" \
   --detector graspnet_baseline \
   --benchmark graspnet \
-  --dataset-root /path/to/graspnet \
+  --dataset-root "$GRASPNET_ROOT" \
   --camera realsense \
   --split train \
   --cloud-sampler stratified_fps \
@@ -172,24 +178,30 @@ grare-prepare \
   --omit-object-cloud
 ```
 
-For the recommended sidecar layout, first retain object clouds in an
-`object_cloud` tree, then precompute frozen Point-MAE features:
+For a low-cost format check, append `--limit 1` to this command first. Then
+run it again without `--limit`. A successful full run writes a
+`manifest.jsonl` plus matching archives under `local_cloud/` and
+`object_cloud/`. Repeat the same command for the `test` input and output
+directories, changing only `train` to `test`.
+
+Next precompute the frozen Point-MAE features for the training split:
 
 ```bash
 grare-precompute-object \
-  --archive-root /path/to/local_cloud/train \
-  --object-cloud-root /path/to/object_cloud/train \
-  --output-root /path/to/object_pooled/train \
+  --archive-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/realsense/local_cloud/train" \
+  --object-cloud-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/realsense/object_cloud/train" \
+  --output-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/realsense/object_pooled/train" \
   --pmae-ckpt "$GRARE_POINT_MAE_CKPT" \
   --object-cloud-points 512 \
   --device cuda
 ```
 
-Repeat feature preparation for the test split. Analytical test labels are
-needed only by the official evaluator and analyses; they are not used for
-checkpoint selection.
+Repeat Point-MAE precomputation for the test split. Its `object_pooled/`
+sidecar is the Stage 3 completion gate. Analytical test labels are needed only
+by the official evaluator and analyses; they are not used for checkpoint
+selection.
 
-## Paper Configurations
+### 4. Reproduce one complete paper setting
 
 The package provides five main configurations:
 
@@ -201,14 +213,9 @@ The package provides five main configurations:
 | `configs/eg_realsense.yaml` | EconomicGrasp | RealSense |
 | `configs/eg_kinect.yaml` | EconomicGrasp | Kinect |
 
-Every configuration uses batch size `2048`. Set the data and output roots:
-
-```bash
-export GRASPNET_ROOT=/path/to/graspnet
-export GRARE_DATA_ROOT=/path/to/grare-data
-export GRARE_OUTPUT_ROOT=/path/to/grare-output
-export GRARE_POINT_MAE_CKPT=/path/to/point_mae_pretrain.pth
-```
+Every configuration uses batch size `2048`. The environment variables were
+written in Stage 2; load them with
+`source "$PWD/grare-assets/grare_paths.env"` before invoking a configuration.
 
 The Kinect GN and EG configurations use mmap-packed training features to
 preserve the reported 2048-candidate batch construction. Build the matching
@@ -225,19 +232,14 @@ grare-pack \
   --require-object-pooled
 ```
 
-Inspect a full command sequence without executing it:
+Inspect the resolved GN-RealSense sequence before using a GPU:
 
 ```bash
 grare-run --config configs/gn_realsense.yaml --dry-run
 ```
 
-Run training, re-ranking, and official evaluation:
-
-```bash
-grare-run --config configs/gn_realsense.yaml
-```
-
-Stages can be run separately:
+Run the three stages in sequence. Stopping after training gives a convenient
+checkpoint gate before creating prediction files and evaluating AP:
 
 ```bash
 grare-run --config configs/gn_realsense.yaml --stop-after train
@@ -245,18 +247,51 @@ grare-run --config configs/gn_realsense.yaml --start-from rerank --stop-after re
 grare-run --config configs/gn_realsense.yaml --start-from eval
 ```
 
-Use `--set train.seed=11` for a different initialization seed. Test AP is not
-used for model or hyperparameter selection.
+The expected artifacts are `best.pt`, a re-ranking summary and records, then
+`per_scene_raw.npy` and `per_scene_raw.json` in `$GRARE_OUTPUT_ROOT`. The
+official test evaluation is valid only when all 90 test scenes and 256 frames
+per scene have been re-ranked.
 
-## Verification
+### 5. Repeat the reported configurations
 
-Run the self-contained pipeline smoke test and the focused unit suite:
+After preparing the corresponding features for all five settings and
+completing GN-RealSense, run every main-result configuration sequentially:
 
 ```bash
-grare-smoke
-python -m pytest -q
+./scripts/run_paper_configs.sh
 ```
 
-The smoke test uses generated inputs and does not require a dataset or trained
-GraRe checkpoint. Exact paper results require training with the public data and
-backbones described above.
+Use `./scripts/run_paper_configs.sh --dry-run` to inspect all five command
+graphs. Use `--set train.seed=11` for a different initialization seed. Test
+AP is not used for model or hyperparameter selection.
+
+### 6. Compare and understand the results
+
+Compare complete official evaluations with the AP tables above and the
+interpretation in [docs/RESULTS.md](docs/RESULTS.md). For paired scene-level
+confidence intervals, use the command in
+[docs/REPRODUCTION.md](docs/REPRODUCTION.md#statistical-comparison). The
+real-robot results are a display-only showcase in
+[docs/REAL_ROBOT_RESULTS.md](docs/REAL_ROBOT_RESULTS.md), not a robot-control
+reproduction target.
+
+## Method Components
+
+- Candidate features: pose, gripper width, and detector confidence.
+- Local features: four radial shells with boundaries `(0, 5, 15, 25, 40)` mm
+  and per-shell FPS budgets `(64, 128, 128, 192)`.
+- Object context: MobileSAM mask prompting followed by a frozen Point-MAE
+  encoder and a trainable projection adapter.
+- Conditioning and fusion: candidate-conditioned FiLM for local and object
+  features, followed by a three-token Transformer.
+- Objective: continuous friction-margin quality prediction with collision,
+  empty-grasp, and object-classification auxiliary losses.
+- Re-ranking: candidate-set z-score normalization and score fusion with
+  `lambda = 1.0` in the paper configurations.
+
+## Reference Guides
+
+- [Configuration reference](configs/README.md)
+- [Detailed offline reproduction](docs/REPRODUCTION.md)
+- [Expected benchmark results](docs/RESULTS.md)
+- [Real-robot result showcase](docs/REAL_ROBOT_RESULTS.md)
