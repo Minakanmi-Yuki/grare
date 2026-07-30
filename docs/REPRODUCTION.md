@@ -40,6 +40,21 @@ needed by GraRe. The exact dump contract is in
 [../DATA_FORMAT.md](../DATA_FORMAT.md). The corresponding upstream projects
 are listed in [../DEPENDENCIES.md](../DEPENDENCIES.md).
 
+The original GraspNet-1Billion archive does not contain the tolerance labels
+used to train Scale-Balanced-Grasp. They are not read by GraRe or by
+pretrained-detector candidate inference. Only if retraining SBG from scratch,
+generate them from the upstream repository:
+
+```bash
+cd /path/to/Scale-Balanced-Grasp/dataset
+python generate_tolerance_label.py \
+  --dataset_root "$GRASPNET_ROOT" \
+  --num_workers <N>
+```
+
+The generator writes `dataset/tolerance/` in that upstream repository; the
+published tolerance archive is an equivalent upstream option.
+
 When both assets are available, validate the workspace and load the generated
 environment variables:
 
@@ -54,7 +69,9 @@ source "$PWD/grare-assets/grare_paths.env"
 ```
 
 Use `--all-paper-settings --require-detector-checkpoints --check` to audit
-all five raw-data reconstruction paths before generating the paper dumps.
+all five pretrained-detector candidate-generation paths before generating the
+paper dumps. This check intentionally excludes SBG tolerance labels because
+they are needed only for upstream SBG training.
 
 ## 3. Construct features
 

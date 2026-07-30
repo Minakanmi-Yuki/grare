@@ -127,12 +127,13 @@ script downloads only the public MobileSAM and Point-MAE checkpoints.
 
 For a full reconstruction from raw data, the external asset inventory is:
 
-| Asset | Required by GraRe feature construction | Required to regenerate detector dumps |
+| Asset | Required by GraRe feature construction | Required for upstream detector work |
 | --- | --- | --- |
 | GraspNet-1Billion | Yes | Yes |
 | MobileSAM and Point-MAE checkpoints | Yes | No |
 | Five detector-setting checkpoint directories | No, after dumps exist | Yes |
 | Five train/test candidate-dump sets | Yes | Produced from the preceding row |
+| Scale-Balanced-Grasp tolerance labels | No | Only when training SBG from scratch |
 
 The five checkpoint and dump settings are `gn_realsense`, `gn_kinect`,
 `sbg_realsense`, `eg_realsense`, and `eg_kinect`. They correspond to three
@@ -141,6 +142,22 @@ EconomicGrasp. GraRe does not load detector checkpoints once their candidate
 dumps have been produced. Obtain all third-party assets from the original
 public projects listed in [DEPENDENCIES.md](DEPENDENCIES.md); none is
 redistributed here.
+
+The tolerance labels are an upstream Scale-Balanced-Grasp training asset, not
+part of the original GraspNet-1Billion download and not a GraRe input. To
+train SBG from scratch, generate them in the upstream repository (or use its
+published archive):
+
+```bash
+cd /path/to/Scale-Balanced-Grasp/dataset
+python generate_tolerance_label.py \
+  --dataset_root "$GRASPNET_ROOT" \
+  --num_workers <N>
+```
+
+This writes `dataset/tolerance/` in the upstream SBG repository. It is not
+needed when using a pretrained SBG detector to produce candidate dumps, nor
+after dumps have been produced for GraRe.
 
 For the recommended first setting, validate GraspNet, both public backbones,
 and the GN-RealSense train/test dumps before preprocessing:
@@ -155,8 +172,9 @@ and the GN-RealSense train/test dumps before preprocessing:
 source "$PWD/grare-assets/grare_paths.env"
 ```
 
-For an audit that all five paper settings can be regenerated from raw assets,
-also provide the detector-checkpoint root and run:
+For an audit that all five paper settings have the assets needed to generate
+candidate dumps from pretrained detector checkpoints, also provide the
+detector-checkpoint root and run:
 
 ```bash
 ./scripts/prepare_data_assets.sh \
