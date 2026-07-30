@@ -136,11 +136,9 @@ source "$GRARE_ASSET_WORKSPACE/grare_paths.env"
 ```
 
 Manually download GraspNet-1Billion from the
-[official GraspNet page](https://graspnet.net/datasets.html) and accept its
-terms. This repository does not download GraspNet and does not support a
-Hugging Face mirror. Extract the official archives to `$GRASPNET_ROOT`
-(default: `$GRARE_ASSET_WORKSPACE/graspnet`) so that `scenes/` and `models/`
-are directly below it. Then download the public
+[official GraspNet page](https://graspnet.net/datasets.html), then extract the
+archives to `$GRASPNET_ROOT` (default:
+`$GRARE_ASSET_WORKSPACE/graspnet`). Then download the public
 [MobileSAM](https://github.com/ChaoningZhang/MobileSAM) and
 [Point-MAE](https://github.com/Pang-Yatian/Point-MAE) weights into the names
 expected by GraRe:
