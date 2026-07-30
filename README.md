@@ -45,6 +45,40 @@ Ubuntu 22.04.5 LTS · Python 3.12.3 · PyTorch 2.12.1+cu130 (CUDA 13.0)
 
 NumPy 2.4.6 · SciPy 1.18.0 · PyYAML 6.0.3 · OpenCV 4.13.0.92 · timm 1.0.27 · MobileSAM 1.0
 
+## Installation
+
+```bash
+# Clone GraRe.
+git clone https://github.com/Minakanmi-Yuki/grare.git
+cd grare
+
+# Create the validated Conda environment.
+conda create -n grare python=3.12 -y
+conda activate grare
+
+# Install the PyTorch CUDA build used for this release.
+python -m pip install --upgrade pip
+python -m pip install \
+  --index-url https://download.pytorch.org/whl/cu130 \
+  torch==2.12.1+cu130 torchvision==0.27.1+cu130
+
+# Install GraRe, feature-construction, and test dependencies.
+python -m pip install -e '.[prepare,test]'
+```
+
+Install the official GraspNet API and its `grasp_nms` extension only when
+running official AP evaluation:
+
+```bash
+git clone https://github.com/graspnet/graspnetAPI ../graspnetAPI
+python -m pip install -e ../graspnetAPI
+python -m pip install grasp_nms
+```
+
+For a different CUDA version, install the matching PyTorch wheel before
+`python -m pip install -e '.[prepare,test]'`. Other public upstream projects
+are listed in [DEPENDENCIES.md](DEPENDENCIES.md).
+
 ## Release Scope
 
 This repository contains GraRe source code, paper configurations, tests, and
@@ -101,46 +135,14 @@ Start with `gn_realsense`: it has the shortest supported path and does not
 need mmap packing. The Kinect GN and EG settings require the additional
 packing step described in Stage 4.
 
-### 1. Installation
+### 1. Verify installation
 
-```bash
-# Clone GraRe.
-git clone https://github.com/Minakanmi-Yuki/grare.git
-cd grare
-
-# Create the validated Conda environment.
-conda create -n grare python=3.12 -y
-conda activate grare
-
-# Install the PyTorch CUDA build used for this release.
-python -m pip install --upgrade pip
-python -m pip install \
-  --index-url https://download.pytorch.org/whl/cu130 \
-  torch==2.12.1+cu130 torchvision==0.27.1+cu130
-
-# Install GraRe, feature-construction, and test dependencies.
-python -m pip install -e '.[prepare,test]'
-```
-
-Confirm that the package is installed before downloading data:
+Confirm the package before downloading data:
 
 ```bash
 grare-smoke
 python -m pytest -q
 ```
-
-Install the official GraspNet API and its `grasp_nms` extension only when
-running official AP evaluation:
-
-```bash
-git clone https://github.com/graspnet/graspnetAPI ../graspnetAPI
-python -m pip install -e ../graspnetAPI
-python -m pip install grasp_nms
-```
-
-For a different CUDA version, install the matching PyTorch wheel before
-`python -m pip install -e '.[prepare,test]'`. Other public upstream projects
-are listed in [DEPENDENCIES.md](DEPENDENCIES.md).
 
 ### 2. Download and place GraspNet-1Billion
 
