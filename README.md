@@ -14,7 +14,7 @@ upstream attribution.
 
 ## Overview
 
-![GraRe architecture: frozen detector, candidate encoder, feature fusion, and re-ranking.](assets/grare-architecture.png)
+<img src="assets/grare-architecture.png" alt="GraRe architecture: frozen detector, candidate encoder, feature fusion, and re-ranking." width="75%" />
 
 GraRe preserves the frozen detector and its candidate set. Candidate
 attributes condition the local-geometry and object-context features through
