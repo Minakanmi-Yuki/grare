@@ -82,9 +82,6 @@ mkdir -p external
 git clone https://github.com/graspnet/graspnet-baseline external/graspnet-baseline
 git clone https://github.com/mahaoxiang822/Scale-Balanced-Grasp external/Scale-Balanced-Grasp
 git clone https://github.com/iSEE-Laboratory/EconomicGrasp external/EconomicGrasp
-git -C external/graspnet-baseline checkout 280c215129f759ed8649cb4e89fc5dfee55f4f80
-git -C external/Scale-Balanced-Grasp checkout 995d6f892474c91fbfcdf58f7d79589be4cbb41c
-git -C external/EconomicGrasp checkout 4119bdcd6bf5d3712a110f78ca87504dd359eec0
 ```
 
 Build the CUDA extensions and verify their imports before generating detector
