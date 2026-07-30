@@ -108,18 +108,40 @@ python -m pip install -e /path/to/graspnetAPI
 The other public upstream projects are listed in
 [DEPENDENCIES.md](DEPENDENCIES.md).
 
-## Public Backbones
+## Data Assets
 
-Download the public MobileSAM and Point-MAE checkpoints with:
+Run the following once from the repository root to create a local asset
+workspace, download the two public backbone checkpoints, and generate an
+environment file for the paper configurations:
 
 ```bash
-./scripts/download_public_backbones.sh checkpoints
-export GRARE_SAM_CKPT="$PWD/checkpoints/mobile_sam.pt"
-export GRARE_POINT_MAE_CKPT="$PWD/checkpoints/point_mae_pretrain.pth"
+./scripts/prepare_data_assets.sh \
+  --workspace "$PWD/grare-assets" \
+  --download-backbones
+source "$PWD/grare-assets/grare_paths.env"
 ```
 
-The download script uses only the public upstream checkpoint URLs. Verify the
-upstream licenses before redistributing those files.
+The workspace separates `graspnet/`, `detector_dumps/`, `backbones/`,
+`grare_data/`, and `grare_output/`. The script downloads only the public
+MobileSAM and Point-MAE checkpoints. Download GraspNet-1Billion and produce
+the frozen-detector dumps with the original public projects listed in
+[DEPENDENCIES.md](DEPENDENCIES.md); neither asset is redistributed here.
+
+After placing those two assets in the workspace (or providing their existing
+locations explicitly), validate the setup before preprocessing:
+
+```bash
+./scripts/prepare_data_assets.sh \
+  --workspace "$PWD/grare-assets" \
+  --graspnet-root /path/to/graspnet \
+  --detector-dumps /path/to/frozen-detector-dumps \
+  --check
+source "$PWD/grare-assets/grare_paths.env"
+```
+
+Use `./scripts/prepare_data_assets.sh --help` for all options. Review each
+upstream license before downloading, using, or redistributing third-party
+assets.
 
 ## Input Contract
 

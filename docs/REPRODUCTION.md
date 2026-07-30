@@ -18,19 +18,34 @@ official projects and licenses are listed in [../DEPENDENCIES.md](../DEPENDENCIE
 
 ## 2. Obtain inputs
 
-Download GraspNet-1Billion from its official source. Run each frozen detector
-using its upstream implementation and retain its raw `(K, 17)` candidate dump
-for every frame. GraRe never changes the candidate identities, poses, widths,
-or candidate-set size. The exact file contract is in
-[../DATA_FORMAT.md](../DATA_FORMAT.md).
-
-Download MobileSAM and Point-MAE from their public upstream releases, for
-example with:
+Create a local asset workspace and download the two public backbone
+checkpoints:
 
 ```bash
-./scripts/download_public_backbones.sh checkpoints
-export GRARE_SAM_CKPT="$PWD/checkpoints/mobile_sam.pt"
-export GRARE_POINT_MAE_CKPT="$PWD/checkpoints/point_mae_pretrain.pth"
+./scripts/prepare_data_assets.sh \
+  --workspace "$PWD/grare-assets" \
+  --download-backbones
+```
+
+Download GraspNet-1Billion from its original public source, subject to its
+terms, and place it under `grare-assets/graspnet/` (or retain it elsewhere).
+Run each frozen detector using its upstream implementation and retain its raw
+`(K, 17)` candidate dump for every frame under
+`grare-assets/detector_dumps/` (or retain it elsewhere). GraRe never changes
+candidate identities, poses, widths, or candidate-set size. The exact dump
+contract is in [../DATA_FORMAT.md](../DATA_FORMAT.md). The corresponding
+upstream projects are listed in [../DEPENDENCIES.md](../DEPENDENCIES.md).
+
+When both assets are available, validate the workspace and load the generated
+environment variables:
+
+```bash
+./scripts/prepare_data_assets.sh \
+  --workspace "$PWD/grare-assets" \
+  --graspnet-root /path/to/graspnet \
+  --detector-dumps /path/to/frozen-detector-dumps \
+  --check
+source "$PWD/grare-assets/grare_paths.env"
 ```
 
 ## 3. Construct features
