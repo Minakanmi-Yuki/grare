@@ -18,67 +18,52 @@ official projects and licenses are listed in [../DEPENDENCIES.md](../DEPENDENCIE
 
 ## 2. Obtain inputs
 
-Create a local asset workspace and download the two public backbone
-checkpoints:
+### 2.1 Download GraspNet-1Billion first
+
+Create the local asset workspace (this does not download data):
 
 ```bash
 ./scripts/prepare_data_assets.sh \
-  --workspace "$PWD/grare-assets" \
-  --download-backbones
-```
-
-Download GraspNet-1Billion from its original public source, subject to its
-terms, and place it under `grare-assets/graspnet/` (or retain it elsewhere).
-For a full reconstruction from raw data, also obtain the five detector-setting
-checkpoints (`gn_realsense`, `gn_kinect`, `sbg_realsense`, `eg_realsense`, and
-`eg_kinect`) from the three original detector projects. Use those checkpoints
-to run each frozen detector and retain its raw `(K, 17)` candidate dump for
-every frame under `grare-assets/detector_dumps/` (or retain the dumps
-elsewhere). GraRe never changes candidate identities, poses, widths, or
-candidate-set size; once the dumps exist, detector checkpoints are no longer
-needed by GraRe. The exact dump contract is in
-[../DATA_FORMAT.md](../DATA_FORMAT.md). The corresponding upstream projects
-are listed in [../DEPENDENCIES.md](../DEPENDENCIES.md).
-
-The original GraspNet-1Billion archive does not contain the tolerance labels
-used to train Scale-Balanced-Grasp. They are not read by GraRe or by
-pretrained-detector candidate inference. Only if retraining SBG from scratch,
-generate them from the upstream repository:
-
-```bash
-cd /path/to/Scale-Balanced-Grasp/dataset
-python generate_tolerance_label.py \
-  --dataset_root "$GRASPNET_ROOT" \
-  --num_workers <N>
-```
-
-The generator writes `dataset/tolerance/` in that upstream repository; the
-published tolerance archive is an equivalent upstream option.
-
-When both assets are available, validate the workspace and load the generated
-environment variables:
-
-```bash
-./scripts/prepare_data_assets.sh \
-  --workspace "$PWD/grare-assets" \
-  --graspnet-root /path/to/graspnet \
-  --detector-dumps /path/to/frozen-detector-dumps \
-  --setting gn_realsense \
-  --check
+  --workspace "$PWD/grare-assets"
 source "$PWD/grare-assets/grare_paths.env"
 ```
 
-Use `--all-paper-settings --require-detector-checkpoints --check` to audit
-all five pretrained-detector candidate-generation paths before generating the
-paper dumps. This check intentionally excludes SBG tolerance labels because
-they are needed only for upstream SBG training.
+Download the original dataset from the
+[official GraspNet download page](https://graspnet.net/datasets.html), accept
+its terms, and extract it under `grare-assets/graspnet/`. The required first
+checkpoint is that `$GRASPNET_ROOT/scenes` exists:
+
+```bash
+test -d "$GRASPNET_ROOT/scenes" && echo "GraspNet-1Billion is ready"
+```
+
+### 2.2 Add feature-construction inputs later
+
+When beginning Stage 3, download the public backbone checkpoints, run each
+frozen detector using its upstream implementation, and retain its raw `(K, 17)`
+candidate dump for every frame under `grare-assets/detector_dumps/` (or retain
+the dumps elsewhere). GraRe never changes candidate identities, poses, widths,
+or candidate-set size. The exact dump contract is in
+[../DATA_FORMAT.md](../DATA_FORMAT.md). The corresponding upstream projects
+are listed in [../DEPENDENCIES.md](../DEPENDENCIES.md).
+
+At that point, download the backbones and validate the complete
+feature-construction input set:
+
+```bash
+./scripts/prepare_data_assets.sh \
+  --workspace "$PWD/grare-assets" \
+  --download-backbones \
+  --check
+```
 
 ## 3. Construct features
 
 Run `grare-prepare` once for train dumps and once for test dumps. Use the
 paper shell boundaries `(0, 5, 15, 25, 40)` mm, per-shell budgets
 `(64, 128, 128, 192)`, and 512 object points. The command in the root
-[README](../README.md#input-contract) is the canonical invocation.
+[README](../README.md#3-build-features-for-one-paper-setting) is the canonical
+invocation.
 
 Store object clouds in a sidecar tree and precompute the frozen Point-MAE
 features:

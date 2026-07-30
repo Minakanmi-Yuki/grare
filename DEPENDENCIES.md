@@ -6,10 +6,10 @@ source dependencies used by the paper:
 
 | Component | Public project | Role |
 | --- | --- | --- |
-| GraspNet-1Billion and evaluator | https://github.com/graspnet/graspnetAPI | Dataset layout, analytical labels, official AP |
+| GraspNet-1Billion | https://graspnet.net/datasets.html | Original dataset download |
+| GraspNet API | https://github.com/graspnet/graspnetAPI | Dataset layout, analytical labels, official AP |
 | GraspNet-Baseline | https://github.com/graspnet/graspnet-baseline | Frozen GN candidate generator |
 | Scale-Balanced-Grasp | https://github.com/mahaoxiang822/Scale-Balanced-Grasp | Frozen SBG candidate generator |
-| SBG tolerance labels | https://github.com/mahaoxiang822/Scale-Balanced-Grasp | Upstream SBG training labels; generate from GraspNet or obtain through the upstream release |
 | EconomicGrasp | https://github.com/iSEE-Laboratory/EconomicGrasp | Frozen EG candidate generator |
 | MobileSAM | https://github.com/ChaoningZhang/MobileSAM | Prompted visible-object masks |
 | Point-MAE | https://github.com/Pang-Yatian/Point-MAE | Frozen object-context encoder |

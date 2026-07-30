@@ -60,7 +60,7 @@ do not proceed when its gate fails.
 | Stage | Goal | Needs external data or GPU? | Completion gate |
 | --- | --- | --- | --- |
 | 1 | Install and exercise the package | No | `grare-smoke` completes |
-| 2 | Create and validate the asset workspace | Downloads only for public backbones | `prepare_data_assets.sh --check` passes |
+| 2 | Download and place GraspNet-1Billion | Dataset download only | `$GRASPNET_ROOT/scenes` exists |
 | 3 | Build train/test features for one setting | GraspNet + detector dumps; GPU recommended | local archives and object-pooled sidecars exist |
 | 4 | Reproduce one paper setting | Full assets + GPU | train, rerank, and evaluation artifacts exist |
 | 5 | Repeat the five reported settings | Full assets + GPU | all five configuration graphs complete |
@@ -108,85 +108,55 @@ python -m pip install -e /path/to/graspnetAPI
 The other public upstream projects are listed in
 [DEPENDENCIES.md](DEPENDENCIES.md).
 
-### 2. Create and validate the data-asset workspace
+### 2. Download and place GraspNet-1Billion
 
-Run the following once from the repository root to create a local asset
-workspace, download the two public backbone checkpoints, and generate an
-environment file for the paper configurations:
+Start by creating the local workspace from the repository root. This command
+does not download any dataset:
 
 ```bash
 ./scripts/prepare_data_assets.sh \
-  --workspace "$PWD/grare-assets" \
-  --download-backbones
+  --workspace "$PWD/grare-assets"
 source "$PWD/grare-assets/grare_paths.env"
 ```
 
-The workspace separates `graspnet/`, `detector_checkpoints/`,
-`detector_dumps/`, `backbones/`, `grare_data/`, and `grare_output/`. The
-script downloads only the public MobileSAM and Point-MAE checkpoints.
+Download the original **GraspNet-1Billion** dataset from the
+[official GraspNet download page](https://graspnet.net/datasets.html), accept
+its terms, and extract it into the workspace so that this directory exists:
 
-For a full reconstruction from raw data, the external asset inventory is:
-
-| Asset | Required by GraRe feature construction | Required for upstream detector work |
-| --- | --- | --- |
-| GraspNet-1Billion | Yes | Yes |
-| MobileSAM and Point-MAE checkpoints | Yes | No |
-| Five detector-setting checkpoint directories | No, after dumps exist | Yes |
-| Five train/test candidate-dump sets | Yes | Produced from the preceding row |
-| Scale-Balanced-Grasp tolerance labels | No | Only when training SBG from scratch |
-
-The five checkpoint and dump settings are `gn_realsense`, `gn_kinect`,
-`sbg_realsense`, `eg_realsense`, and `eg_kinect`. They correspond to three
-upstream detector families: GraspNet-Baseline, Scale-Balanced-Grasp, and
-EconomicGrasp. GraRe does not load detector checkpoints once their candidate
-dumps have been produced. Obtain all third-party assets from the original
-public projects listed in [DEPENDENCIES.md](DEPENDENCIES.md); none is
-redistributed here.
-
-The tolerance labels are an upstream Scale-Balanced-Grasp training asset, not
-part of the original GraspNet-1Billion download and not a GraRe input. To
-train SBG from scratch, generate them in the upstream repository (or use its
-published archive):
-
-```bash
-cd /path/to/Scale-Balanced-Grasp/dataset
-python generate_tolerance_label.py \
-  --dataset_root "$GRASPNET_ROOT" \
-  --num_workers <N>
+```text
+grare-assets/
+  graspnet/
+    scenes/
+      scene_0000/
+      ...
 ```
 
-This writes `dataset/tolerance/` in the upstream SBG repository. It is not
-needed when using a pretrained SBG detector to produce candidate dumps, nor
-after dumps have been produced for GraRe.
+The default dataset root is therefore `$PWD/grare-assets/graspnet`; the
+generated environment file exposes the same path as `$GRASPNET_ROOT`. Confirm
+this first data-acquisition milestone with:
 
-For the recommended first setting, validate GraspNet, both public backbones,
-and the GN-RealSense train/test dumps before preprocessing:
+```bash
+test -d "$GRASPNET_ROOT/scenes" && echo "GraspNet-1Billion is ready"
+```
+
+The workspace also reserves `detector_dumps/`, `backbones/`, `grare_data/`,
+and `grare_output/` for later stages. Do not run the full `--check` yet: it
+also requires candidate dumps and the two public backbone checkpoints needed
+only when feature construction begins.
+
+Before Stage 3, add frozen-detector candidate dumps and download the public
+MobileSAM and Point-MAE checkpoints:
 
 ```bash
 ./scripts/prepare_data_assets.sh \
   --workspace "$PWD/grare-assets" \
-  --graspnet-root /path/to/graspnet \
-  --detector-dumps /path/to/frozen-detector-dumps \
-  --setting gn_realsense \
-  --check
-source "$PWD/grare-assets/grare_paths.env"
-```
-
-For an audit that all five paper settings have the assets needed to generate
-candidate dumps from pretrained detector checkpoints, also provide the
-detector-checkpoint root and run:
-
-```bash
-./scripts/prepare_data_assets.sh \
-  --workspace "$PWD/grare-assets" \
-  --all-paper-settings \
-  --require-detector-checkpoints \
+  --download-backbones \
   --check
 ```
 
-Use `./scripts/prepare_data_assets.sh --help` for all options. Review each
-upstream license before downloading, using, or redistributing third-party
-assets.
+If either input is stored elsewhere, pass `--graspnet-root` or
+`--detector-dumps`; see [DEPENDENCIES.md](DEPENDENCIES.md) for their original
+public sources. Use `./scripts/prepare_data_assets.sh --help` for all options.
 
 ### 3. Build features for one paper setting
 
@@ -308,9 +278,7 @@ completing GN-RealSense, run every main-result configuration sequentially:
 
 Use `./scripts/run_paper_configs.sh --dry-run` to inspect all five command
 graphs. Use `--set train.seed=11` for a different initialization seed. Test
-AP is not used for model or hyperparameter selection. Detector checkpoints
-are not read at this stage: all five candidate-dump sets must already have
-been prepared.
+AP is not used for model or hyperparameter selection.
 
 ### 6. Compare and understand the results
 
