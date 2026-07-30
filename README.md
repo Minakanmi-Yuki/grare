@@ -60,18 +60,21 @@ python -m pip install \
   --index-url https://download.pytorch.org/whl/cu130 \
   torch==2.12.1+cu130 torchvision==0.27.1+cu130
 python -m pip install -e .
-python -m pip install \
-  "mobile-sam @ git+https://github.com/ChaoningZhang/MobileSAM.git" \
-  "timm>=0.9" \
-  "pytest>=7"
+python -m pip install "timm>=0.9" "pytest>=7"
 ```
 
-The feature-construction dependency
-[MobileSAM](https://github.com/ChaoningZhang/MobileSAM) is installed directly
-from its public repository. GraRe implements the required
-[Point-MAE](https://github.com/Pang-Yatian/Point-MAE) encoder internally, so
-no separate Point-MAE source checkout is needed; its pretrained weight is
-downloaded in the next section.
+Install [MobileSAM](https://github.com/ChaoningZhang/MobileSAM), which GraRe
+uses to construct visible-object masks during feature preparation:
+
+```bash
+python -m pip install \
+  "mobile-sam @ git+https://github.com/ChaoningZhang/MobileSAM.git"
+```
+
+GraRe implements the required
+[Point-MAE](https://github.com/Pang-Yatian/Point-MAE) encoder internally in
+`grare/rescoring/point_mae.py`, so no separate Point-MAE source installation
+is needed. Download its pretrained weight in the next section.
 
 To regenerate frozen-detector candidate dumps, install the shared detector
 runtime and build dependencies. This requires a CUDA toolkit with `nvcc` that
