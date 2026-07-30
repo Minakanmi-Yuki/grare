@@ -12,6 +12,16 @@ predictions. See [docs/PUBLICATION_SCOPE.md](docs/PUBLICATION_SCOPE.md) for
 the release boundary and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for
 upstream attribution.
 
+## Overview
+
+![GraRe architecture: frozen detector, candidate encoder, feature fusion, and re-ranking.](assets/grare-architecture.png)
+
+GraRe preserves the frozen detector and its candidate set. Candidate
+attributes condition the local-geometry and object-context features through
+FiLM; a three-token Transformer then predicts a quality score for each
+candidate. Candidate-set z-score normalization fuses that score with the
+detector confidence to obtain the final ranking.
+
 ## Reproducibility Guide
 
 - [Paper configurations](configs/README.md) map the five reported settings to
