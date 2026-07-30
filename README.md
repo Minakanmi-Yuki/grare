@@ -66,8 +66,8 @@ python -m pip install \
 python -m pip install -e '.[prepare,test]'
 ```
 
-Install the official GraspNet API and its `grasp_nms` extension only when
-running official AP evaluation:
+Install the official [GraspNet API](https://github.com/graspnet/graspnetAPI)
+and its `grasp_nms` extension only when running official AP evaluation:
 
 ```bash
 git clone https://github.com/graspnet/graspnetAPI ../graspnetAPI
