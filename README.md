@@ -149,6 +149,13 @@ into the names expected by GraRe:
   --download-backbones
 ```
 
+To regenerate candidate dumps, download the five published detector
+checkpoints: [GN RealSense](https://drive.google.com/file/d/1hd0G8LN6tRpi4742XOTEisbTXNZ-1jmk/view?usp=sharing),
+[GN Kinect](https://drive.google.com/file/d/1vK-d0yxwyJwXHYWOtH1bDMoe--uZ2oLX/view?usp=sharing),
+[SBG RealSense](https://drive.google.com/drive/folders/1Y2o0uAbhS6-yZhPkKMAAnL0tCpbiJfk0?usp=share_link),
+and the [EG v1 release](https://github.com/iSEE-Laboratory/EconomicGrasp/releases/tag/v1)
+for both cameras. Place them under `$GRARE_DETECTOR_CKPT_ROOT` as shown below.
+
 Generate raw candidate dumps with
 [GraspNet-Baseline](https://github.com/graspnet/graspnet-baseline),
 [Scale-Balanced-Grasp](https://github.com/mahaoxiang822/Scale-Balanced-Grasp),
@@ -164,6 +171,15 @@ grare-assets/
       scene_0000/
       ...
     models/
+  detector_checkpoints/
+    graspnet_baseline/
+      checkpoint-rs.tar
+      checkpoint-kn.tar
+    scale_balanced_grasp/
+      log_full_model/checkpoint.tar
+    economicgrasp/
+      economicgrasp_realsense.tar
+      economicgrasp_kinect.tar
   detector_dumps/
     graspnet_baseline/
       realsense/
