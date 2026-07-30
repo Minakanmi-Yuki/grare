@@ -83,6 +83,22 @@ frames per scene have been re-ranked. `grare-evaluate` checks this requirement
 before calling the official GraspNet evaluator. A one-frame or one-scene run
 is useful for debugging but must not be reported as a paper AP.
 
+## Statistical comparison
+
+For paired detector-versus-GraRe scene comparisons, use the raw tensors from
+two complete official evaluations:
+
+```bash
+python scripts/paired_scene_bootstrap.py \
+  --baseline /path/to/detector/per_scene_raw.npy \
+  --treatment /path/to/grare/per_scene_raw.npy \
+  --output paired_bootstrap.json
+```
+
+The script reports paired scene-bootstrap 95% intervals, mean AP changes, and
+the number of scenes with positive changes for the overall, Seen, Similar, and
+Novel splits.
+
 ## 5. Verification levels
 
 | Level | Command | What it verifies |
