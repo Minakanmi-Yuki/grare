@@ -47,40 +47,37 @@ NumPy 2.4.6 · SciPy 1.18.0 · PyYAML 6.0.3 · OpenCV 4.13.0.92 · timm 1.0.27 �
 
 ## Installation
 
-### GraRe environment and dependencies
+Clone GraRe, create the validated Conda environment, and install the project
+dependencies:
 
 ```bash
-# Clone GraRe.
 git clone https://github.com/Minakanmi-Yuki/grare.git
 cd grare
-
-# Create the validated Conda environment.
 conda create -n grare python=3.12 -y
 conda activate grare
-
-# Install the PyTorch CUDA build used for this release.
 python -m pip install --upgrade pip
 python -m pip install \
   --index-url https://download.pytorch.org/whl/cu130 \
   torch==2.12.1+cu130 torchvision==0.27.1+cu130
-
-# Install GraRe, feature-construction, and test dependencies.
 python -m pip install -e '.[prepare,test]'
 ```
 
-### Detector sources and CUDA extensions
-
-This step is required only to regenerate frozen-detector candidate dumps from
-GraspNet-1Billion. It requires a CUDA toolkit with `nvcc` that is compatible
-with the PyTorch build above.
+To regenerate frozen-detector candidate dumps, install the shared detector
+runtime and build dependencies. This requires a CUDA toolkit with `nvcc` that
+is compatible with the PyTorch build above:
 
 ```bash
-# Shared runtime and EconomicGrasp build dependencies.
 conda install -y -c anaconda openblas-devel
 conda install -y -c conda-forge ninja
 python -m pip install tensorboard open3d Pillow
+```
 
-# Clone the detector revisions used by this release.
+Clone the pinned revisions of
+[GraspNet-Baseline](https://github.com/graspnet/graspnet-baseline),
+[Scale-Balanced-Grasp](https://github.com/mahaoxiang822/Scale-Balanced-Grasp),
+and [EconomicGrasp](https://github.com/iSEE-Laboratory/EconomicGrasp):
+
+```bash
 mkdir -p external
 git clone https://github.com/graspnet/graspnet-baseline external/graspnet-baseline
 git clone https://github.com/mahaoxiang822/Scale-Balanced-Grasp external/Scale-Balanced-Grasp
@@ -88,22 +85,24 @@ git clone https://github.com/iSEE-Laboratory/EconomicGrasp external/EconomicGras
 git -C external/graspnet-baseline checkout 280c215129f759ed8649cb4e89fc5dfee55f4f80
 git -C external/Scale-Balanced-Grasp checkout 995d6f892474c91fbfcdf58f7d79589be4cbb41c
 git -C external/EconomicGrasp checkout 4119bdcd6bf5d3712a110f78ca87504dd359eec0
+```
 
-# Build the GN/SBG PointNet2 and KNN extensions and the EconomicGrasp
-# MinkowskiEngine, PointNet2, and KNN extensions.
+Build the CUDA extensions and verify their imports before generating detector
+dumps:
+
+```bash
 ./scripts/build_detector_extensions.sh
-
-# Verify every compiled extension import before generating detector dumps.
 ./scripts/verify_detector_extensions.sh
 ```
 
 The build script applies the included CUDA 13 compatibility patch to the
-vendored EconomicGrasp MinkowskiEngine and reuses the GraspNet-Baseline KNN
-extension for Scale-Balanced-Grasp on PyTorch 2.x. Do not install the upstream
-Scale-Balanced-Grasp `requirements.txt`, which pins an incompatible historic
-PyTorch release.
-
-### Official GraspNet evaluation
+[EconomicGrasp](https://github.com/iSEE-Laboratory/EconomicGrasp)
+MinkowskiEngine and reuses the
+[GraspNet-Baseline](https://github.com/graspnet/graspnet-baseline) KNN
+extension for
+[Scale-Balanced-Grasp](https://github.com/mahaoxiang822/Scale-Balanced-Grasp)
+on PyTorch 2.x. Do not install the upstream Scale-Balanced-Grasp
+`requirements.txt`, which pins an incompatible historic PyTorch release.
 
 Install the official [GraspNet API](https://github.com/graspnet/graspnetAPI)
 and its `grasp_nms` extension only when running official AP evaluation:
@@ -138,23 +137,23 @@ gain summary.
 
 | Frozen detector | Ranking | Seen | Similar | Novel | Average |
 | --- | --- | ---: | ---: | ---: | ---: |
-| GraspNet-Baseline | Detector | 47.83 | 42.79 | 16.94 | 35.85 |
-| GraspNet-Baseline | **GraRe** | **64.48** | **58.78** | **25.10** | **49.45** |
-| Scale-Balanced-Grasp | Detector | 62.27 | 56.92 | 23.80 | 47.66 |
-| Scale-Balanced-Grasp | **GraRe** | **68.76** | **62.64** | **27.51** | **52.97** |
-| EconomicGrasp | Detector | 69.30 | 61.50 | 25.28 | 52.02 |
-| EconomicGrasp | **GraRe** | **75.12** | **64.39** | **28.34** | **55.95** |
+| [GraspNet-Baseline](https://github.com/graspnet/graspnet-baseline) | Detector | 47.83 | 42.79 | 16.94 | 35.85 |
+| [GraspNet-Baseline](https://github.com/graspnet/graspnet-baseline) | **GraRe** | **64.48** | **58.78** | **25.10** | **49.45** |
+| [Scale-Balanced-Grasp](https://github.com/mahaoxiang822/Scale-Balanced-Grasp) | Detector | 62.27 | 56.92 | 23.80 | 47.66 |
+| [Scale-Balanced-Grasp](https://github.com/mahaoxiang822/Scale-Balanced-Grasp) | **GraRe** | **68.76** | **62.64** | **27.51** | **52.97** |
+| [EconomicGrasp](https://github.com/iSEE-Laboratory/EconomicGrasp) | Detector | 69.30 | 61.50 | 25.28 | 52.02 |
+| [EconomicGrasp](https://github.com/iSEE-Laboratory/EconomicGrasp) | **GraRe** | **75.12** | **64.39** | **28.34** | **55.95** |
 
 ### Kinect
 
 | Frozen detector | Ranking | Seen | Similar | Novel | Average |
 | --- | --- | ---: | ---: | ---: | ---: |
-| GraspNet-Baseline | Detector | 41.97 | 37.56 | 12.24 | 30.59 |
-| GraspNet-Baseline | **GraRe** | **53.94** | **46.39** | **16.04** | **38.79** |
-| Scale-Balanced-Grasp | Detector | — | — | — | — |
-| Scale-Balanced-Grasp | **GraRe** | **—** | **—** | **—** | **—** |
-| EconomicGrasp | Detector | 63.75 | 52.43 | 19.61 | 45.26 |
-| EconomicGrasp | **GraRe** | **69.90** | **58.00** | **22.04** | **49.98** |
+| [GraspNet-Baseline](https://github.com/graspnet/graspnet-baseline) | Detector | 41.97 | 37.56 | 12.24 | 30.59 |
+| [GraspNet-Baseline](https://github.com/graspnet/graspnet-baseline) | **GraRe** | **53.94** | **46.39** | **16.04** | **38.79** |
+| [Scale-Balanced-Grasp](https://github.com/mahaoxiang822/Scale-Balanced-Grasp) | Detector | — | — | — | — |
+| [Scale-Balanced-Grasp](https://github.com/mahaoxiang822/Scale-Balanced-Grasp) | **GraRe** | **—** | **—** | **—** | **—** |
+| [EconomicGrasp](https://github.com/iSEE-Laboratory/EconomicGrasp) | Detector | 63.75 | 52.43 | 19.61 | 45.26 |
+| [EconomicGrasp](https://github.com/iSEE-Laboratory/EconomicGrasp) | **GraRe** | **69.90** | **58.00** | **22.04** | **49.98** |
 
 ## Reproduce GraRe Step by Step
 
@@ -297,11 +296,11 @@ The package provides five main configurations:
 
 | Config | Frozen detector | Camera |
 | --- | --- | --- |
-| `configs/gn_realsense.yaml` | GraspNet-Baseline | RealSense |
-| `configs/gn_kinect.yaml` | GraspNet-Baseline | Kinect |
-| `configs/sbg_realsense.yaml` | Scale-Balanced-Grasp | RealSense |
-| `configs/eg_realsense.yaml` | EconomicGrasp | RealSense |
-| `configs/eg_kinect.yaml` | EconomicGrasp | Kinect |
+| `configs/gn_realsense.yaml` | [GraspNet-Baseline](https://github.com/graspnet/graspnet-baseline) | RealSense |
+| `configs/gn_kinect.yaml` | [GraspNet-Baseline](https://github.com/graspnet/graspnet-baseline) | Kinect |
+| `configs/sbg_realsense.yaml` | [Scale-Balanced-Grasp](https://github.com/mahaoxiang822/Scale-Balanced-Grasp) | RealSense |
+| `configs/eg_realsense.yaml` | [EconomicGrasp](https://github.com/iSEE-Laboratory/EconomicGrasp) | RealSense |
+| `configs/eg_kinect.yaml` | [EconomicGrasp](https://github.com/iSEE-Laboratory/EconomicGrasp) | Kinect |
 
 Every configuration uses batch size `2048`. The environment variables were
 written in Stage 2; load them with
