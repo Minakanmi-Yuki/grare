@@ -22,6 +22,36 @@ FiLM; a three-token Transformer then predicts a quality score for each
 candidate. Candidate-set z-score normalization fuses that score with the
 detector confidence to obtain the final ranking.
 
+## Reported Main Results
+
+The following offline GraspNet-1Billion results use the official evaluation
+protocol. Values are AP (%); GraRe re-ranks the unchanged candidate set from
+each frozen detector. `—` denotes an unavailable result. See
+[docs/RESULTS.md](docs/RESULTS.md) for the reproduction context and compact
+gain summary.
+
+### RealSense
+
+| Frozen detector | Ranking | Seen | Similar | Novel | Average |
+| --- | --- | ---: | ---: | ---: | ---: |
+| GraspNet-Baseline | Detector | 47.83 | 42.79 | 16.94 | 35.85 |
+| GraspNet-Baseline | **GraRe** | **64.48** | **58.78** | **25.10** | **49.45** |
+| Scale-Balanced-Grasp | Detector | 62.27 | 56.92 | 23.80 | 47.66 |
+| Scale-Balanced-Grasp | **GraRe** | **68.76** | **62.64** | **27.51** | **52.97** |
+| EconomicGrasp | Detector | 69.30 | 61.50 | 25.28 | 52.02 |
+| EconomicGrasp | **GraRe** | **75.12** | **64.39** | **28.34** | **55.95** |
+
+### Kinect
+
+| Frozen detector | Ranking | Seen | Similar | Novel | Average |
+| --- | --- | ---: | ---: | ---: | ---: |
+| GraspNet-Baseline | Detector | 41.97 | 37.56 | 12.24 | 30.59 |
+| GraspNet-Baseline | **GraRe** | **53.94** | **46.39** | **16.04** | **38.79** |
+| Scale-Balanced-Grasp | Detector | — | — | — | — |
+| Scale-Balanced-Grasp | **GraRe** | **—** | **—** | **—** | **—** |
+| EconomicGrasp | Detector | 63.75 | 52.43 | 19.61 | 45.26 |
+| EconomicGrasp | **GraRe** | **69.90** | **58.00** | **22.04** | **49.98** |
+
 ## Reproducibility Guide
 
 - [Paper configurations](configs/README.md) map the five reported settings to
