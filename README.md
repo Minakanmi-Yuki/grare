@@ -1,26 +1,44 @@
-# GraRe
+# GraRe: Grasp Candidate Re-Ranking for Frozen 6-DoF Grasp Detectors
 
-GraRe re-ranks the unchanged grasp candidates produced by a frozen 6-DoF
-grasp detector. For each candidate, it combines candidate attributes,
-shell-stratified local geometry, and visible-object context to predict grasp
-quality. The predicted quality and detector confidence are normalized within
-the candidate set and combined to produce the final order.
+> A detector-agnostic re-ranking framework that improves grasp ordering while
+> preserving every grasp candidate produced by a frozen 6-DoF detector.
 
-This repository contains source code only. It does not include datasets,
-detector repositories, detector weights, GraRe checkpoints, or generated
-predictions. See [docs/PUBLICATION_SCOPE.md](docs/PUBLICATION_SCOPE.md) for
-the release boundary and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for
-upstream attribution.
+<p align="center">
+  <img src="assets/grare-architecture.png" alt="GraRe architecture: frozen detector, candidate encoder, feature fusion, and re-ranking." width="100%" />
+</p>
 
-## Overview
+## Introduction
 
-<img src="assets/grare-architecture.png" alt="GraRe architecture: frozen detector, candidate encoder, feature fusion, and re-ranking." width="100%" />
+Existing 6-DoF grasp detectors commonly execute candidates in the order of
+their detector confidence. A high-confidence candidate, however, need not be
+the best candidate to execute in a cluttered scene. GraRe addresses this
+ordering problem without retraining or changing the detector: it preserves the
+detector parameters, poses, widths, identities, and candidate-set size, then
+predicts a grasp-quality score for each existing candidate.
 
-GraRe preserves the frozen detector and its candidate set. Candidate
-attributes condition the local-geometry and object-context features through
-FiLM; a three-token Transformer then predicts a quality score for each
-candidate. Candidate-set z-score normalization fuses that score with the
-detector confidence to obtain the final ranking.
+GraRe combines candidate attributes with shell-stratified local geometry and
+visible-object context. Candidate-conditioned FiLM and a three-token
+Transformer fuse these signals; candidate-set z-score normalization then
+combines predicted quality with the original detector confidence to obtain a
+new order.
+
+## Highlights
+
+- **Candidate preserving.** GraRe changes only ranking scores and order; it
+  never generates, removes, or edits grasp candidates.
+- **Detector agnostic.** The same re-ranking formulation is evaluated with
+  GraspNet-Baseline, Scale-Balanced-Grasp, and EconomicGrasp.
+- **Consistent offline gains.** Across the five reported detector-camera
+  settings, GraRe improves Average AP by up to **13.60 points** under the
+  official GraspNet-1Billion protocol.
+
+## Release Scope
+
+This repository contains GraRe source code, paper configurations, tests, and
+documentation. It does not redistribute datasets, detector repositories or
+weights, GraRe checkpoints, or generated predictions. See
+[docs/PUBLICATION_SCOPE.md](docs/PUBLICATION_SCOPE.md) for the release boundary
+and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for upstream attribution.
 
 ## Reported Main Results
 
