@@ -162,9 +162,16 @@ license and terms. GraRe never downloads or redistributes them.
 | GraspNet-1Billion | [graspnet.net/datasets.html](https://graspnet.net/datasets.html) | `$GRASPNET_ROOT` |
 | MobileSAM weight | [MobileSAM repository](https://github.com/ChaoningZhang/MobileSAM), `weights/mobile_sam.pt` | `$GRARE_SAM_CKPT` |
 | Point-MAE weight | [Point-MAE release](https://github.com/Pang-Yatian/Point-MAE/releases/tag/main), `pretrain.pth` | `$GRARE_POINT_MAE_CKPT` |
-| GN checkpoints | [GraspNet-Baseline](https://github.com/graspnet/graspnet-baseline) | `$GRARE_DETECTOR_CKPT_ROOT/graspnet_baseline/` |
-| SBG checkpoint | [Scale-Balanced-Grasp](https://github.com/mahaoxiang822/Scale-Balanced-Grasp) | `$GRARE_DETECTOR_CKPT_ROOT/scale_balanced_grasp/log_full_model/` |
-| EG checkpoints | [EconomicGrasp v1 release](https://github.com/iSEE-Laboratory/EconomicGrasp/releases/tag/v1) | `$GRARE_DETECTOR_CKPT_ROOT/economicgrasp/` |
+| GN checkpoints | [GraspNet-Baseline](https://github.com/graspnet/graspnet-baseline#training-and-testing), `checkpoint-rs.tar` and `checkpoint-kn.tar` | `$GRARE_DETECTOR_CKPT_ROOT/graspnet_baseline/` |
+| SBG checkpoint | [Scale-Balanced-Grasp](https://github.com/mahaoxiang822/Scale-Balanced-Grasp#test), the `log_full_model/checkpoint.tar` in its Drive folder | `$GRARE_DETECTOR_CKPT_ROOT/scale_balanced_grasp/log_full_model/` |
+| EG checkpoints | [EconomicGrasp v1 release](https://github.com/iSEE-Laboratory/EconomicGrasp/releases/tag/v1), `economicgrasp_realsense.tar` and `economicgrasp_kinect.tar` | `$GRARE_DETECTOR_CKPT_ROOT/economicgrasp/` |
+
+The detector checkpoints are not on the front page of their repositories.
+GraspNet-Baseline links them under "Training and Testing" and Scale-Balanced-Grasp
+under "Train&Test → Test"; both offer Google Drive and Baidu Pan mirrors. The
+Scale-Balanced-Grasp link opens a Drive folder rather than a file, and the
+`log_full_model/checkpoint.tar` name comes from its own `command_test.sh`.
+EconomicGrasp attaches both weights to its v1 release page directly.
 
 Extract the GraspNet archives so that `$GRASPNET_ROOT/scenes`,
 `$GRASPNET_ROOT/models`, and `$GRASPNET_ROOT/dex_models` all exist, and make
