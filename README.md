@@ -197,6 +197,23 @@ dumps:
 ./scripts/check_downloaded_assets.sh
 ```
 
+## Reproduction Stages
+
+The remaining sections run in order. Each has a gate; do not continue past a
+failing one.
+
+| Stage | Section | Needs GPU? | Gate |
+| --- | --- | --- | --- |
+| 1 | [Installation](#installation) | No | `grare-smoke` and `python -m pytest -q` pass |
+| 2 | [Downloads](#downloads) | No | `./scripts/check_downloaded_assets.sh` passes |
+| 3 | [Prepare](#prepare) | Yes | `./scripts/check_downloaded_assets.sh --with-dumps` passes and `object_pooled/` exists |
+| 4 | [Train](#train) | Yes | `best.pt` and re-ranked `.npy` files exist |
+| 5 | [Evaluate](#evaluate) | Yes | `per_scene_raw.npy` exists for a complete test dump |
+| 6 | [Reported Results](#reported-results) | No | measured AP is compared with the reported tables |
+
+Stages 1 and 2 need no GPU, so the installation can be validated before any
+data is downloaded.
+
 ## Prepare
 
 First, run each frozen detector with its downloaded checkpoint on the GraspNet
@@ -242,8 +259,13 @@ scale_balanced_grasp  realsense
 economicgrasp         realsense + kinect
 ```
 
-After all five dump groups are ready, set the detector once, then prepare one
-split. The defaults in
+Once the dumps exist, confirm the complete feature-construction input set:
+
+```bash
+./scripts/check_downloaded_assets.sh --with-dumps
+```
+
+Then set the detector once and prepare one split. The defaults in
 `grare-prepare` reproduce the paper's four shells, per-shell sampling budgets,
 and 512-point local and object clouds:
 
@@ -300,19 +322,114 @@ $GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/
 Set `DETECTOR` and `CAMERA` to the detector-camera pair used by the selected
 paper configuration.
 
-## Release Scope
+## Train
 
-This repository contains GraRe source code, paper configurations, tests, and
-documentation. It does not redistribute datasets, detector repositories or
-weights, GraRe checkpoints, or generated predictions. See
-[docs/PUBLICATION_SCOPE.md](docs/PUBLICATION_SCOPE.md) for the release boundary
-and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for upstream attribution.
+The package provides five main configurations, one per reported setting:
 
-## Reported Main Results
+| Config | Frozen detector | Camera |
+| --- | --- | --- |
+| `configs/gn_realsense.yaml` | [GraspNet-Baseline](https://github.com/graspnet/graspnet-baseline) | RealSense |
+| `configs/gn_kinect.yaml` | [GraspNet-Baseline](https://github.com/graspnet/graspnet-baseline) | Kinect |
+| `configs/sbg_realsense.yaml` | [Scale-Balanced-Grasp](https://github.com/mahaoxiang822/Scale-Balanced-Grasp) | RealSense |
+| `configs/eg_realsense.yaml` | [EconomicGrasp](https://github.com/iSEE-Laboratory/EconomicGrasp) | RealSense |
+| `configs/eg_kinect.yaml` | [EconomicGrasp](https://github.com/iSEE-Laboratory/EconomicGrasp) | Kinect |
+
+Start with `gn_realsense`: it has the shortest supported path and does not need
+mmap packing. Every configuration uses batch size `2048`. Load the environment
+file written during [Downloads](#downloads) before invoking a configuration:
+
+```bash
+source "$GRARE_ASSET_WORKSPACE/grare_paths.env"
+```
+
+The Kinect GN and EG configurations read mmap-packed training features to
+preserve the reported 2048-candidate batch construction. Build the packed tree
+after object-feature precomputation, substituting the detector and camera of
+the configuration you are running:
+
+```bash
+grare-pack \
+  --input-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/kinect/local_cloud/train" \
+  --object-pooled-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/kinect/object_pooled/train" \
+  --output-root "$GRARE_DATA_ROOT/packed/graspnet_baseline/kinect/train" \
+  --archive-manifest auto \
+  --require-archive-manifest \
+  --require-object-pooled
+```
+
+Inspect the resolved command graph before using a GPU:
+
+```bash
+grare-run --config configs/gn_realsense.yaml --dry-run
+```
+
+Then train and re-rank. Stopping after training gives a checkpoint gate before
+prediction files are written:
+
+```bash
+grare-run --config configs/gn_realsense.yaml --stop-after train
+grare-run --config configs/gn_realsense.yaml --start-from rerank --stop-after rerank
+```
+
+Training writes `best.pt` to `$GRARE_OUTPUT_ROOT/checkpoints/<name>/`, selected
+by held-out scene-level validation loss; test AP is never used to choose an
+epoch or a hyperparameter. Re-ranking writes evaluator-compatible `.npy` files
+plus a summary and per-frame records to `$GRARE_OUTPUT_ROOT/predictions/<name>/`.
+
+`grare-rerank` consumes the relabeled `.npz` archives from `grare-prepare`, not
+raw detector `.npy` dumps. It keeps every candidate and changes only the order.
+
+To reproduce all five settings, run them sequentially once GN-RealSense works
+and the corresponding features exist:
+
+```bash
+./scripts/run_paper_configs.sh --stop-after rerank
+```
+
+Use `--dry-run` to inspect all five command graphs, or `--set train.seed=11`
+for a different initialization seed.
+## Evaluate
+
+Run the official GraspNet evaluator on the re-ranked predictions:
+
+```bash
+grare-run --config configs/gn_realsense.yaml --start-from eval
+```
+
+This writes `per_scene_raw.npy` and `per_scene_raw.json` to
+`$GRARE_OUTPUT_ROOT/evaluation/<name>/`.
+
+Official AP requires the complete test protocol: all 90 test scenes and all 256
+frames per scene must have been re-ranked. `grare-evaluate` checks this before
+calling the evaluator and refuses an incomplete dump. A one-frame or one-scene
+run is useful for debugging the pipeline but must not be reported as an AP.
+
+To obtain the detector baseline that the reported gains are measured against,
+re-run the same configuration with `rerank.lambda=0.0`, which keeps the
+detector's own ranking. Its artifacts go to separate `*_detector_baseline`
+directories, so they cannot overwrite the GraRe results:
+
+```bash
+grare-run --config configs/gn_realsense.yaml --start-from rerank --set rerank.lambda=0.0
+```
+
+For paired scene-level confidence intervals between the two complete
+evaluations:
+
+```bash
+python scripts/paired_scene_bootstrap.py \
+  --baseline "$GRARE_OUTPUT_ROOT/evaluation/gn_realsense_detector_baseline/per_scene_raw.npy" \
+  --treatment "$GRARE_OUTPUT_ROOT/evaluation/gn_realsense/per_scene_raw.npy" \
+  --output paired_bootstrap.json
+```
+
+Compare the resulting AP with [Reported Results](#reported-results) and the
+interpretation in [docs/RESULTS.md](docs/RESULTS.md).
+## Reported Results
 
 The following offline GraspNet-1Billion results use the official evaluation
 protocol. Values are AP (%); GraRe re-ranks the unchanged candidate set from
-each frozen detector. `—` denotes an unavailable result. See
+each frozen detector. `—` denotes an unavailable result. The Detector rows are the baseline described in [Evaluate](#evaluate). See
 [docs/RESULTS.md](docs/RESULTS.md) for the reproduction context and compact
 gain summary.
 
@@ -338,137 +455,10 @@ gain summary.
 | [EconomicGrasp](https://github.com/iSEE-Laboratory/EconomicGrasp) | Detector | 63.75 | 52.43 | 19.61 | 45.26 |
 | [EconomicGrasp](https://github.com/iSEE-Laboratory/EconomicGrasp) | **GraRe** | **69.90** | **58.00** | **22.04** | **49.98** |
 
-## Reproduce GraRe Step by Step
+Scale-Balanced-Grasp is RealSense-only because no Kinect checkpoint is
+published upstream.
 
-Work through the following stages in order. Each stage has a completion gate;
-do not proceed when its gate fails.
-
-| Stage | Goal | Needs external data or GPU? | Completion gate |
-| --- | --- | --- | --- |
-| 1 | Install and exercise the package | No | `grare-smoke` completes |
-| 2 | Download and place required assets | Downloads only | `./scripts/check_downloaded_assets.sh` passes |
-| 3 | Prepare three input assets for one setting | GraspNet + detector dumps; GPU recommended | local archives and object-pooled sidecars exist |
-| 4 | Reproduce one paper setting | Full assets + GPU | train, rerank, and evaluation artifacts exist |
-| 5 | Repeat the five reported settings | Full assets + GPU | all five configuration graphs complete |
-| 6 | Interpret the comparison | Complete official test evaluations | AP is compared with the reported table above |
-
-Start with `gn_realsense`: it has the shortest supported path and does not
-need mmap packing. The Kinect GN and EG settings require the additional
-packing step described in Stage 4.
-
-### 1. Verify installation
-
-Confirm the package before downloading data:
-
-```bash
-grare-smoke
-python -m pytest -q
-```
-
-### 2. Download and place assets
-
-Follow [Downloads](#downloads) to acquire and place the dataset, detector
-checkpoints, and backbone weights. Source the generated environment file before
-continuing:
-
-```bash
-source "$GRARE_ASSET_WORKSPACE/grare_paths.env"
-```
-
-Then confirm the downloads before spending GPU time:
-
-```bash
-./scripts/check_downloaded_assets.sh
-```
-
-If the dataset is stored elsewhere, pass `--graspnet-root`; use
-`./scripts/check_downloaded_assets.sh --help` for all options.
-
-### 3. Prepare three input assets for one paper setting
-
-Generate candidate dumps with `grare-dump`, then build features with
-`grare-prepare` and `grare-precompute-object`. All three are described in
-[Prepare](#prepare). Once the dumps exist, re-run the asset check with
-`--with-dumps` to confirm every feature-construction input is present:
-
-```bash
-./scripts/check_downloaded_assets.sh --with-dumps
-```
-
-The `object_pooled/` sidecar is the Stage 3 completion gate.
-
-### 4. Reproduce one complete paper setting
-
-The package provides five main configurations:
-
-| Config | Frozen detector | Camera |
-| --- | --- | --- |
-| `configs/gn_realsense.yaml` | [GraspNet-Baseline](https://github.com/graspnet/graspnet-baseline) | RealSense |
-| `configs/gn_kinect.yaml` | [GraspNet-Baseline](https://github.com/graspnet/graspnet-baseline) | Kinect |
-| `configs/sbg_realsense.yaml` | [Scale-Balanced-Grasp](https://github.com/mahaoxiang822/Scale-Balanced-Grasp) | RealSense |
-| `configs/eg_realsense.yaml` | [EconomicGrasp](https://github.com/iSEE-Laboratory/EconomicGrasp) | RealSense |
-| `configs/eg_kinect.yaml` | [EconomicGrasp](https://github.com/iSEE-Laboratory/EconomicGrasp) | Kinect |
-
-Every configuration uses batch size `2048`. The environment variables were
-written in Stage 2; load them with
-`source "$GRARE_ASSET_WORKSPACE/grare_paths.env"` before invoking a
-configuration.
-
-The Kinect GN and EG configurations use mmap-packed training features to
-preserve the reported 2048-candidate batch construction. Build the matching
-packed tree after object-feature precomputation (substitute the detector and
-camera names for the selected configuration):
-
-```bash
-grare-pack \
-  --input-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/kinect/local_cloud/train" \
-  --object-pooled-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/kinect/object_pooled/train" \
-  --output-root "$GRARE_DATA_ROOT/packed/graspnet_baseline/kinect/train" \
-  --archive-manifest auto \
-  --require-archive-manifest \
-  --require-object-pooled
-```
-
-Inspect the resolved GN-RealSense sequence before using a GPU:
-
-```bash
-grare-run --config configs/gn_realsense.yaml --dry-run
-```
-
-Run the three stages in sequence. Stopping after training gives a convenient
-checkpoint gate before creating prediction files and evaluating AP:
-
-```bash
-grare-run --config configs/gn_realsense.yaml --stop-after train
-grare-run --config configs/gn_realsense.yaml --start-from rerank --stop-after rerank
-grare-run --config configs/gn_realsense.yaml --start-from eval
-```
-
-The expected artifacts are `best.pt`, a re-ranking summary and records, then
-`per_scene_raw.npy` and `per_scene_raw.json` in `$GRARE_OUTPUT_ROOT`. The
-official test evaluation is valid only when all 90 test scenes and 256 frames
-per scene have been re-ranked.
-
-### 5. Repeat the reported configurations
-
-After preparing the corresponding features for all five settings and
-completing GN-RealSense, run every main-result configuration sequentially:
-
-```bash
-./scripts/run_paper_configs.sh
-```
-
-Use `./scripts/run_paper_configs.sh --dry-run` to inspect all five command
-graphs. Use `--set train.seed=11` for a different initialization seed. Test
-AP is not used for model or hyperparameter selection.
-
-### 6. Compare and understand the results
-
-Compare complete official evaluations with the AP tables above and the
-interpretation in [docs/RESULTS.md](docs/RESULTS.md). For paired scene-level
-confidence intervals, use the command in
-[docs/REPRODUCTION.md](docs/REPRODUCTION.md#statistical-comparison). The
-real-robot results are a display-only showcase in
+The real-robot outcomes are a display-only showcase in
 [docs/REAL_ROBOT_RESULTS.md](docs/REAL_ROBOT_RESULTS.md), not a robot-control
 reproduction target.
 
@@ -485,6 +475,14 @@ reproduction target.
   empty-grasp, and object-classification auxiliary losses.
 - Re-ranking: candidate-set z-score normalization and score fusion with
   `lambda = 1.0` in the paper configurations.
+
+## Release Scope
+
+This repository contains GraRe source code, paper configurations, tests, and
+documentation. It does not redistribute datasets, detector repositories or
+weights, GraRe checkpoints, or generated predictions. See
+[docs/PUBLICATION_SCOPE.md](docs/PUBLICATION_SCOPE.md) for the release boundary
+and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for upstream attribution.
 
 ## Reference Guides
 

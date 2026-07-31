@@ -84,7 +84,7 @@ validate the complete feature-construction input set:
 Run `grare-prepare` once for train dumps and once for test dumps. Use the
 paper shell boundaries `(0, 5, 15, 25, 40)` mm, per-shell budgets
 `(64, 128, 128, 192)`, and 512 object points. The command in the root
-[README](../README.md#3-build-features-for-one-paper-setting) is the canonical
+[README](../README.md#prepare) is the canonical
 invocation.
 
 Store object clouds in a sidecar tree and precompute the frozen Point-MAE
