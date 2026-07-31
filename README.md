@@ -283,8 +283,52 @@ grare-dump --detector graspnet_baseline --camera realsense --split test
 Add `--deterministic` for bit-reproducible dumps on a fixed machine: the
 upstream detectors use nondeterministic CUDA kernels, so repeated runs
 otherwise vary the confidence column by roughly `1e-4` without changing grasp
-poses. Use `--dry-run` to preview the upstream command, and
-`--index-shard-count`/`--index-shard-id` to spread GN or SBG across GPUs.
+poses. Use `--dry-run` to preview the upstream command.
+
+This stage runs the detector over every frame of every scene, so its defaults,
+inherited from each upstream project, leave a modern GPU idle. Raise them to
+match the host:
+
+| Flag | Default | Effect |
+| --- | --- | --- |
+| `--batch-size` | 1 for GN and SBG, 4 for EG | frames per forward pass; raise until VRAM is the limit |
+| `--data-workers` | 6 for GN, 4 for SBG and EG | DataLoader processes reading RGB-D frames |
+| `--postprocess-workers` | 0, meaning serial | CPU threads for collision filtering and saving; GN and SBG only |
+| `--prefetch-factor` | 4 | batches each worker preloads |
+
+```bash
+grare-dump --detector graspnet_baseline --camera realsense --split train \
+  --batch-size 8 --data-workers 12 --postprocess-workers 8
+```
+
+`--postprocess-workers` is often the largest single win, because collision
+filtering runs on CPU and is serial by default. Verify a new combination on a
+few batches before committing to a whole split:
+
+```bash
+grare-dump --detector graspnet_baseline --camera realsense --split test \
+  --batch-size 8 --data-workers 12 --postprocess-workers 8 --max-batches 4
+```
+
+Keep `--data-workers` low when the dataset sits on a mechanical disk: parallel
+readers turn sequential reads into seeks and can end up slower than fewer
+workers.
+
+GN and SBG can also be split across GPUs with `--index-shard-count` and
+`--index-shard-id`; EG does not support sharding and rejects those flags:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 grare-dump --detector graspnet_baseline --camera realsense \
+  --split train --index-shard-count 2 --index-shard-id 0 &
+CUDA_VISIBLE_DEVICES=1 grare-dump --detector graspnet_baseline --camera realsense \
+  --split train --index-shard-count 2 --index-shard-id 1 &
+wait
+```
+
+These flags change throughput only, not which candidates the detector emits.
+Use the same values for the train and test splits of one setting, though: dumps
+regenerated under different conditions vary slightly, so mixing them
+introduces avoidable inconsistency between the two splits.
 
 Regenerated dumps are not expected to match another machine's dumps exactly.
 GPU model, driver, and CUDA version shift the detector's float outputs
