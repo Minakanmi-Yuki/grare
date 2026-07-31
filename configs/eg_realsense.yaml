@@ -10,3 +10,6 @@ paths:
   checkpoint_dir: ${GRARE_OUTPUT_ROOT}/checkpoints/eg_realsense
   rerank_dir: ${GRARE_OUTPUT_ROOT}/predictions/eg_realsense
   eval_dir: ${GRARE_OUTPUT_ROOT}/evaluation/eg_realsense
+train:
+  # EconomicGrasp emits more candidates per frame than GN/SBG.
+  num_workers: 16

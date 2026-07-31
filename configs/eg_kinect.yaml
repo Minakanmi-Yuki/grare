@@ -11,3 +11,6 @@ paths:
   rerank_dir: ${GRARE_OUTPUT_ROOT}/predictions/eg_kinect
   eval_dir: ${GRARE_OUTPUT_ROOT}/evaluation/eg_kinect
   packed_train: ${GRARE_DATA_ROOT}/packed/economicgrasp/kinect/train
+train:
+  # EconomicGrasp emits more candidates per frame than GN/SBG.
+  num_workers: 16

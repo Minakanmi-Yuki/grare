@@ -254,6 +254,12 @@ shells for local geometry, and writes MobileSAM object clouds to the
 `object_cloud/` sidecar. Add `--limit 1` for a one-frame check, then set
 `SPLIT=test` and run the same command again.
 
+Raise `--num-workers` to match the host: this stage runs over every frame of
+every scene, so it dominates preparation time. Values around 12 to 24 are
+reasonable on a many-core machine; beyond that, CPU contention and MobileSAM
+GPU memory usually become the limit. The stage is resumable, so an interrupted
+run can be repeated with the same command.
+
 Precompute the frozen Point-MAE object features for the same split:
 
 ```bash

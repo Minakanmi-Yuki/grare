@@ -302,7 +302,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-pin-memory", action="store_true")
     parser.add_argument("--no-persistent-workers", action="store_true")
     parser.add_argument("--amp", choices=("auto", "bf16", "fp16", "off"), default="auto")
-    parser.add_argument("--cache-device", choices=("auto", "cpu", "cuda"), default="auto")
+    parser.add_argument(
+        "--cache-device",
+        choices=("cpu", "cuda"),
+        default="cpu",
+        help="Where eager dataset tensors are cached. The paper configurations use cpu.",
+    )
     parser.add_argument(
         "--archive-sample-counts",
         type=int,

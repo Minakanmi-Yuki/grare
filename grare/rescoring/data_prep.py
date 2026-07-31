@@ -57,13 +57,22 @@ def make_worker_init_fn(seed: int):
     return _init
 
 
+CACHE_DEVICES = ("cpu", "cuda")
+
+
 def resolve_cache_device(
     requested: str,
     train_device: torch.device,
 ) -> torch.device:
+    """Resolve where eager dataset tensors are cached.
+
+    The paper configurations cache on CPU: the training features are far larger
+    than GPU memory for EG, and CPU caching keeps DataLoader workers usable.
+    """
+    if requested not in CACHE_DEVICES:
+        raise ValueError(f"cache_device must be one of {CACHE_DEVICES}; got {requested!r}")
     if requested == "cuda" and train_device.type == "cuda" and torch.cuda.is_available():
         return train_device
-    # CPU is the safe default; CUDA caching remains available when requested.
     return torch.device("cpu")
 
 
