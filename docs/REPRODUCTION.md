@@ -13,12 +13,17 @@ GraRe and its feature-construction dependencies:
 python -m pip install -e '.[test,prepare]'
 ```
 
-The official GraspNet API is not on PyPI, so install it from its repository
-before running `grare-prepare` or `grare-evaluate`; both stages require it:
+The GraspNet API and MobileSAM are not on PyPI, so install both from their
+repositories. `grare-prepare` and `grare-evaluate` require the API; feature
+construction requires MobileSAM:
 
 ```bash
 git clone https://github.com/graspnet/graspnetAPI ../graspnetAPI
 python -m pip install -e ../graspnetAPI
+
+git clone https://github.com/ChaoningZhang/MobileSAM.git ../MobileSAM
+python -m pip install -e ../MobileSAM
+
 python -m pip install grasp_nms
 ```
 

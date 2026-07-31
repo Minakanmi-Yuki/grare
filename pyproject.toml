@@ -19,11 +19,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Feature preparation additionally needs graspnetAPI, which is installed from
-# its official repository (see README Installation) because it is not published
-# on PyPI. open3d is used to read the GraspNet object meshes during relabeling.
+# Feature preparation also needs graspnetAPI and MobileSAM. Neither is published
+# on PyPI, so both are installed from their official repositories as documented
+# in the README; a git dependency here would make pip clone them silently, with
+# no progress output and no way to retry just that step. open3d reads the
+# GraspNet object meshes during relabeling and timm backs the MobileSAM encoder.
 prepare = [
-    "mobile-sam @ git+https://github.com/ChaoningZhang/MobileSAM.git",
     "timm>=0.9",
     "open3d>=0.18",
 ]

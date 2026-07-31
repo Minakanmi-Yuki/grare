@@ -76,12 +76,16 @@ python -m pytest -q
 
 Feature preparation and official AP evaluation additionally require the
 official [GraspNet API](https://github.com/graspnet/graspnetAPI) and
-[MobileSAM](https://github.com/ChaoningZhang/MobileSAM). Install both before
-running `grare-prepare`:
+[MobileSAM](https://github.com/ChaoningZhang/MobileSAM). Neither is on PyPI, so
+clone both and install them from the checkout:
 
 ```bash
 git clone https://github.com/graspnet/graspnetAPI ../graspnetAPI
 python -m pip install -e ../graspnetAPI
+
+git clone https://github.com/ChaoningZhang/MobileSAM.git ../MobileSAM
+python -m pip install -e ../MobileSAM
+
 python -m pip install grasp_nms
 python -m pip install -e '.[prepare]'
 ```
@@ -89,6 +93,11 @@ python -m pip install -e '.[prepare]'
 `graspnetAPI` supplies the analytical force-closure, collision, and
 empty-grasp labels used by `grare-prepare`, and the official evaluator used by
 `grare-evaluate`. MobileSAM supplies the visible-object masks.
+
+Clone both explicitly rather than letting pip fetch them: the MobileSAM
+repository carries a 40 MB weight file, and a slow clone inside pip shows no
+progress and cannot be retried on its own. If GitHub is slow or unreachable,
+enable your proxy or mirror for the two `git clone` commands only.
 
 To regenerate frozen-detector candidate dumps, install the shared detector
 runtime and build dependencies. This requires a CUDA toolkit with `nvcc` that
