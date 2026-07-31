@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Create and validate the local asset workspace used by GraRe.
+# Create the local asset workspace used by GraRe and write its path environment.
 #
-# GraspNet-1Billion and frozen-detector candidate dumps are not redistributed
-# by this repository. Obtain them from their original public sources, then use
-# --check to verify that the workspace is ready for feature construction.
+# This script never downloads anything. GraspNet-1Billion, the frozen-detector
+# checkpoints, and the MobileSAM and Point-MAE backbone weights must be obtained
+# from their original official sources under their own licenses; see the README
+# "Downloads" section for the official links and the target directory for each
+# file. Use scripts/check_downloaded_assets.sh to verify placement afterwards.
 set -euo pipefail
 
 usage() {
@@ -11,27 +13,27 @@ usage() {
 Usage: ./scripts/prepare_data_assets.sh [options]
 
 Create a local GraRe asset workspace and write <workspace>/grare_paths.env.
-The optional public backbone download obtains MobileSAM and Point-MAE only.
-GraspNet-1Billion and frozen-detector candidate dumps must be obtained from
-their original public sources and are never downloaded or redistributed here.
+No assets are downloaded: obtain GraspNet-1Billion, the detector checkpoints,
+MobileSAM, and Point-MAE from their official sources (see the README Downloads
+section) and place them in the directories printed by this script.
 
 Options:
   --workspace DIR           Asset workspace (default: ./grare-assets)
   --graspnet-root DIR       Existing GraspNet-1Billion root (default: <workspace>/graspnet)
-  --detector-dumps DIR      Existing root containing frozen-detector .npy dumps
+  --detector-dumps DIR      Root for frozen-detector .npy dumps
                             (default: <workspace>/detector_dumps)
-  --download-backbones      Download public MobileSAM and Point-MAE weights
-  --check                   Validate required assets and exit nonzero if any are missing
-  --dry-run                 Print planned actions without writing or downloading
+  --dry-run                 Print planned layout without creating anything
   -h, --help                Show this help text
+
+Verification:
+  ./scripts/check_downloaded_assets.sh              downloaded assets (Stage 2)
+  ./scripts/check_downloaded_assets.sh --with-dumps adds detector dumps (Stage 3)
 EOF
 }
 
 workspace="$(pwd)/grare-assets"
 graspnet_root=""
 detector_dumps=""
-download_backbones=false
-check_only=false
 dry_run=false
 
 while [[ $# -gt 0 ]]; do
@@ -47,14 +49,6 @@ while [[ $# -gt 0 ]]; do
     --detector-dumps)
       detector_dumps="$2"
       shift 2
-      ;;
-    --download-backbones)
-      download_backbones=true
-      shift
-      ;;
-    --check)
-      check_only=true
-      shift
       ;;
     --dry-run)
       dry_run=true
@@ -106,47 +100,15 @@ write_env_file() {
   printf 'export GRARE_POINT_MAE_CKPT=%q\n' "$backbone_dir/point_mae_pretrain.pth" >> "$env_file"
 }
 
-validate_workspace() {
-  local missing=0
-  if [[ ! -d "$graspnet_root/scenes" ]]; then
-    printf 'MISSING: GraspNet scenes directory: %s/scenes\n' "$graspnet_root" >&2
-    missing=1
-  fi
-  if ! find "$detector_dumps" -type f -name '*.npy' -print -quit 2>/dev/null | grep -q .; then
-    printf 'MISSING: frozen-detector .npy dumps under: %s\n' "$detector_dumps" >&2
-    missing=1
-  fi
-  if [[ ! -s "$backbone_dir/mobile_sam.pt" ]]; then
-    printf 'MISSING: MobileSAM checkpoint: %s/mobile_sam.pt\n' "$backbone_dir" >&2
-    missing=1
-  fi
-  if [[ ! -s "$backbone_dir/point_mae_pretrain.pth" ]]; then
-    printf 'MISSING: Point-MAE checkpoint: %s/point_mae_pretrain.pth\n' "$backbone_dir" >&2
-    missing=1
-  fi
-  if [[ "$missing" -ne 0 ]]; then
-    return 1
-  fi
-  printf 'Asset check passed. Source %s before running a paper configuration.\n' "$env_file"
-}
-
 show_plan
 if [[ "$dry_run" == true ]]; then
-  printf '%s\n' 'Dry run: no directories, environment file, or downloads were created.'
+  printf '%s\n' 'Dry run: no directories or environment file were created.'
   exit 0
 fi
 
 mkdir -p "$workspace" "$graspnet_root" "$detector_dumps" "$detector_checkpoint_root" "$backbone_dir" "$data_root" "$output_root"
 write_env_file
 printf 'Wrote environment file: %s\n' "$env_file"
-
-if [[ "$download_backbones" == true ]]; then
-  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  "$script_dir/download_public_backbones.sh" "$backbone_dir"
-fi
-
-if [[ "$check_only" == true ]]; then
-  validate_workspace
-else
-  printf '%s\n' 'Next: place GraspNet under the listed GraspNet root, add frozen-detector dumps, then run this script with --check.'
-fi
+printf '%s\n' 'Next: download the assets listed in the README Downloads section from their'
+printf '%s\n' 'official sources into the directories above, then run:'
+printf '%s\n' '  ./scripts/check_downloaded_assets.sh'

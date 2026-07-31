@@ -59,17 +59,27 @@ python -m pip install --upgrade pip
 python -m pip install \
   --index-url https://download.pytorch.org/whl/cu130 \
   torch==2.12.1+cu130 torchvision==0.27.1+cu130
-python -m pip install -e .
-python -m pip install "timm>=0.9" "pytest>=7"
+python -m pip install -e '.[test]'
 ```
 
-Install [MobileSAM](https://github.com/ChaoningZhang/MobileSAM), which GraRe
-uses to construct visible-object masks during feature preparation:
+At this point `grare-smoke` and `python -m pytest -q` already work, so you can
+verify the installation before downloading any data.
+
+Feature preparation and official AP evaluation additionally require the
+official [GraspNet API](https://github.com/graspnet/graspnetAPI) and
+[MobileSAM](https://github.com/ChaoningZhang/MobileSAM). Install both before
+running `grare-prepare`:
 
 ```bash
-python -m pip install \
-  "mobile-sam @ git+https://github.com/ChaoningZhang/MobileSAM.git"
+git clone https://github.com/graspnet/graspnetAPI ../graspnetAPI
+python -m pip install -e ../graspnetAPI
+python -m pip install grasp_nms
+python -m pip install -e '.[prepare]'
 ```
+
+`graspnetAPI` supplies the analytical force-closure, collision, and
+empty-grasp labels used by `grare-prepare`, and the official evaluator used by
+`grare-evaluate`. MobileSAM supplies the visible-object masks.
 
 To regenerate frozen-detector candidate dumps, install the shared detector
 runtime and build dependencies. This requires a CUDA toolkit with `nvcc` that
@@ -110,15 +120,6 @@ extension for
 on PyTorch 2.x. Do not install the upstream Scale-Balanced-Grasp
 `requirements.txt`, which pins an incompatible historic PyTorch release.
 
-Install the official [GraspNet API](https://github.com/graspnet/graspnetAPI)
-and its `grasp_nms` extension only when running official AP evaluation:
-
-```bash
-git clone https://github.com/graspnet/graspnetAPI ../graspnetAPI
-python -m pip install -e ../graspnetAPI
-python -m pip install grasp_nms
-```
-
 For a different CUDA version, install the matching PyTorch wheel before
 installing GraRe and the dependencies listed above. Other public upstream
 projects are listed in [DEPENDENCIES.md](DEPENDENCIES.md).
@@ -135,26 +136,24 @@ export GRARE_ASSET_WORKSPACE=/path/to/grare-assets
 source "$GRARE_ASSET_WORKSPACE/grare_paths.env"
 ```
 
-Manually download GraspNet-1Billion from the
-[official GraspNet page](https://graspnet.net/datasets.html), then extract the
-archives to `$GRASPNET_ROOT` (default:
-`$GRARE_ASSET_WORKSPACE/graspnet`). Then download the public
-[MobileSAM weight](https://huggingface.co/dhkim2810/MobileSAM) and
-[Point-MAE weight](https://github.com/Pang-Yatian/Point-MAE/releases/tag/main)
-into the names expected by GraRe:
+Download every asset yourself from its official source, under that project's own
+license and terms. GraRe never downloads or redistributes them.
 
-```bash
-./scripts/prepare_data_assets.sh \
-  --workspace "$GRARE_ASSET_WORKSPACE" \
-  --download-backbones
-```
+| Asset | Official source | Place at |
+| --- | --- | --- |
+| GraspNet-1Billion | [graspnet.net/datasets.html](https://graspnet.net/datasets.html) | `$GRASPNET_ROOT` |
+| MobileSAM weight | [MobileSAM repository](https://github.com/ChaoningZhang/MobileSAM), `weights/mobile_sam.pt` | `$GRARE_SAM_CKPT` |
+| Point-MAE weight | [Point-MAE release](https://github.com/Pang-Yatian/Point-MAE/releases/tag/main), `pretrain.pth` | `$GRARE_POINT_MAE_CKPT` |
+| GN checkpoints | [GraspNet-Baseline](https://github.com/graspnet/graspnet-baseline) | `$GRARE_DETECTOR_CKPT_ROOT/graspnet_baseline/` |
+| SBG checkpoint | [Scale-Balanced-Grasp](https://github.com/mahaoxiang822/Scale-Balanced-Grasp) | `$GRARE_DETECTOR_CKPT_ROOT/scale_balanced_grasp/log_full_model/` |
+| EG checkpoints | [EconomicGrasp v1 release](https://github.com/iSEE-Laboratory/EconomicGrasp/releases/tag/v1) | `$GRARE_DETECTOR_CKPT_ROOT/economicgrasp/` |
 
-To regenerate candidate dumps, download the five published detector
-checkpoints: [GN RealSense](https://drive.google.com/file/d/1hd0G8LN6tRpi4742XOTEisbTXNZ-1jmk/view?usp=sharing),
-[GN Kinect](https://drive.google.com/file/d/1vK-d0yxwyJwXHYWOtH1bDMoe--uZ2oLX/view?usp=sharing),
-[SBG RealSense](https://drive.google.com/drive/folders/1Y2o0uAbhS6-yZhPkKMAAnL0tCpbiJfk0?usp=share_link),
-and the [EG v1 release](https://github.com/iSEE-Laboratory/EconomicGrasp/releases/tag/v1)
-for both cameras. Place them under `$GRARE_DETECTOR_CKPT_ROOT` as shown below.
+Extract the GraspNet archives so that `$GRASPNET_ROOT/scenes` and
+`$GRASPNET_ROOT/models` exist. Rename the two backbone weights to
+`mobile_sam.pt` and `point_mae_pretrain.pth`; the Point-MAE release asset is
+named `pretrain.pth` upstream. The detector checkpoints are needed only to
+regenerate candidate dumps, and each upstream project documents its own
+download location for them.
 
 The downloaded assets should be arranged as follows:
 
@@ -189,19 +188,44 @@ dumps:
 
 ## Prepare
 
-GraRe uses the three inputs described in the paper: unchanged candidate
-attributes, shell-stratified local geometry, and object context. Run each
-frozen detector with its downloaded checkpoint on the GraspNet train and test
-splits, retaining every `(K, 17)` GraspGroup output under
-`$GRARE_DUMP_ROOT`:
+First, run each frozen detector with its downloaded checkpoint on the GraspNet
+train and test splits, retaining every unchanged `(K, 17)` GraspGroup output.
+This requires the detector sources and CUDA extensions from
+[Installation](#installation).
+
+`grare-dump` runs a frozen detector over one split and writes the dumps that
+`grare-prepare` consumes. Repeat it for each detector, camera, and split used by
+the setting you want to reproduce:
+
+```bash
+grare-dump --detector graspnet_baseline --camera realsense --split train
+grare-dump --detector graspnet_baseline --camera realsense --split test
+```
+
+Add `--deterministic` for bit-reproducible dumps: the upstream detectors use
+nondeterministic CUDA kernels, so repeated runs otherwise vary the confidence
+column by roughly `1e-4`. Grasp poses and candidate-set size are unaffected
+either way. Use `--dry-run` to preview the upstream command, and
+`--index-shard-count`/`--index-shard-id` to spread GN or SBG across GPUs.
+
+Dumps are written per detector and split, with the camera below each scene:
 
 ```text
-$GRARE_DUMP_ROOT/$DETECTOR/$CAMERA/
+$GRARE_DUMP_ROOT/$DETECTOR/
 ├── train/scene_0000/$CAMERA/0000.npy
 └── test/scene_0100/$CAMERA/0000.npy
 ```
 
-Set the detector once, then prepare one split. The defaults in
+The five paper settings need these dump groups:
+
+```text
+graspnet_baseline     realsense + kinect
+scale_balanced_grasp  realsense
+economicgrasp         realsense + kinect
+```
+
+After all five dump groups are ready, set the detector once, then prepare one
+split. The defaults in
 `grare-prepare` reproduce the paper's four shells, per-shell sampling budgets,
 and 512-point local and object clouds:
 
@@ -211,8 +235,10 @@ CAMERA=realsense
 SPLIT=train
 
 grare-prepare \
-  --input-root "$GRARE_DUMP_ROOT/$DETECTOR/$CAMERA/$SPLIT" \
+  --input-root "$GRARE_DUMP_ROOT/$DETECTOR/$SPLIT" \
+  --pattern "scene_*/$CAMERA/*.npy" \
   --input-format detector-dump \
+  --num-workers 12 \
   --output-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/local_cloud/$SPLIT" \
   --object-cloud-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/object_cloud/$SPLIT" \
   --detector "$DETECTOR" \
@@ -296,7 +322,7 @@ do not proceed when its gate fails.
 | Stage | Goal | Needs external data or GPU? | Completion gate |
 | --- | --- | --- | --- |
 | 1 | Install and exercise the package | No | `grare-smoke` completes |
-| 2 | Download and place required assets | Downloads only | GraspNet, backbones, and detector checkpoints are present |
+| 2 | Download and place required assets | Downloads only | `./scripts/check_downloaded_assets.sh` passes |
 | 3 | Prepare three input assets for one setting | GraspNet + detector dumps; GPU recommended | local archives and object-pooled sidecars exist |
 | 4 | Reproduce one paper setting | Full assets + GPU | train, rerank, and evaluation artifacts exist |
 | 5 | Repeat the five reported settings | Full assets + GPU | all five configuration graphs complete |
@@ -325,15 +351,27 @@ continuing:
 source "$GRARE_ASSET_WORKSPACE/grare_paths.env"
 ```
 
-Generate candidate dumps as described in [Prepare](#prepare) before feature
-construction. If the dataset is stored elsewhere, pass `--graspnet-root`; use
-`./scripts/prepare_data_assets.sh --help` for all options.
+Then confirm the downloads before spending GPU time:
+
+```bash
+./scripts/check_downloaded_assets.sh
+```
+
+If the dataset is stored elsewhere, pass `--graspnet-root`; use
+`./scripts/check_downloaded_assets.sh --help` for all options.
 
 ### 3. Prepare three input assets for one paper setting
 
-Follow [Prepare](#prepare) for candidate dumps, shell-wise local clouds, and
-Point-MAE object features. The `object_pooled/` sidecar is the Stage 3
-completion gate.
+Generate candidate dumps with `grare-dump`, then build features with
+`grare-prepare` and `grare-precompute-object`. All three are described in
+[Prepare](#prepare). Once the dumps exist, re-run the asset check with
+`--with-dumps` to confirm every feature-construction input is present:
+
+```bash
+./scripts/check_downloaded_assets.sh --with-dumps
+```
+
+The `object_pooled/` sidecar is the Stage 3 completion gate.
 
 ### 4. Reproduce one complete paper setting
 

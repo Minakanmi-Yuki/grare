@@ -19,11 +19,19 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-prepare = ["mobile-sam @ git+https://github.com/ChaoningZhang/MobileSAM.git", "timm>=0.9"]
+# Feature preparation additionally needs graspnetAPI, which is installed from
+# its official repository (see README Installation) because it is not published
+# on PyPI. open3d is used to read the GraspNet object meshes during relabeling.
+prepare = [
+    "mobile-sam @ git+https://github.com/ChaoningZhang/MobileSAM.git",
+    "timm>=0.9",
+    "open3d>=0.18",
+]
 test = ["pytest>=7"]
 
 [project.scripts]
 grare-run = "grare.cli.run:main"
+grare-dump = "grare.cli.dump:main"
 grare-prepare = "grare.cli.prepare:main"
 grare-precompute-object = "grare.cli.precompute_object:main"
 grare-pack = "grare.cli.pack:main"

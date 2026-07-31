@@ -39,6 +39,36 @@ class DetectorPrediction:
             return np.empty((0,), dtype=np.float32)
         return self.grasp_group_array[:, 0].astype(np.float32, copy=False)
 
+    @property
+    def frame_name(self) -> str:
+        return f"{self.key.frame_id:04d}.npy"
+
+    def save_eval_npy(self, dump_root: str | Path) -> Path:
+        """Write the unchanged candidate array to the GraspNet dump layout."""
+        save_dir = Path(dump_root) / self.key.scene_name / self.key.camera
+        save_dir.mkdir(parents=True, exist_ok=True)
+        save_path = save_dir / self.frame_name
+        np.save(save_path, self.grasp_group_array.astype(np.float32, copy=False))
+        return save_path
+
+
+def iter_prediction_files(dump_root: str | Path, camera: str) -> list[Path]:
+    """List detector dumps, accepting both the camera and flat scene layouts."""
+    dump_root = Path(dump_root)
+    candidates = [
+        *sorted(dump_root.glob(f"scene_*/{camera}/*.npy")),
+        *sorted(dump_root.glob("scene_*/*.npy")),
+    ]
+    deduped: dict[tuple[int, int], Path] = {}
+    for path in candidates:
+        try:
+            key = parse_prediction_scene_frame(path, camera)
+        except ValueError:
+            continue
+        deduped.setdefault(key, path)
+    return [deduped[key] for key in sorted(deduped)]
+
+
 def parse_prediction_scene_frame(path: str | Path, camera: str) -> tuple[int, int]:
     path = Path(path)
     frame_id = int(path.stem)

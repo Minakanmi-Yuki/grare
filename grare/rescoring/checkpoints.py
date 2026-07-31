@@ -40,6 +40,26 @@ def _resolve_object_pmae_ckpt(path: object) -> str:
     return ""
 
 
+_HEAD_PREFIXES = ("score_head.", "coll_head.", "empty_head.", "obj_head.")
+
+
+def _normalize_head_keys(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    """Accept output-head keys saved with an inner ``body`` submodule.
+
+    Checkpoints produced before the heads were simplified to a plain
+    ``nn.Linear`` store them as ``score_head.body.weight``. The tensor shapes
+    are unchanged, so dropping the ``body.`` level is an exact remapping.
+    """
+    remapped = {}
+    for key, value in state_dict.items():
+        for prefix in _HEAD_PREFIXES:
+            if key.startswith(prefix + "body."):
+                key = prefix + key[len(prefix) + len("body.") :]
+                break
+        remapped[key] = value
+    return remapped
+
+
 def load_model_checkpoint(
     checkpoint_path: str | Path,
     device: str = "cpu",
@@ -59,13 +79,14 @@ def load_model_checkpoint(
         filtered["object_pmae_ckpt"] = _resolve_object_pmae_ckpt(filtered["object_pmae_ckpt"])
     config = RescorerConfig(**filtered)
     model = GraspRescorer(config)
+    state_dict = _normalize_head_keys(checkpoint["model_state_dict"])
     try:
-        model.load_state_dict(checkpoint["model_state_dict"])
+        model.load_state_dict(state_dict)
     except RuntimeError as exc:
         raise RuntimeError(
             f"failed to load rescorer checkpoint {checkpoint_path!s}. "
-            "If this checkpoint was trained with the removed global/scene-token "
-            "tier, retrain or download a Pose + Local + Object checkpoint."
+            "The checkpoint state_dict does not match the published GraRe "
+            "candidate + local + object architecture."
         ) from exc
     model._checkpoint_trainer_config = trainer_config_dict
     model.to(device)

@@ -7,8 +7,8 @@ usage() {
 Usage: ./scripts/check_downloaded_assets.sh [options]
 
 Verify GraspNet-1Billion, the MobileSAM and Point-MAE weights, and the five
-published detector checkpoints. Candidate dumps are generated later and are
-not checked here.
+published detector checkpoints. Candidate dumps are generated later, so they
+are only checked when --with-dumps is passed.
 
 Options:
   --workspace DIR                  Asset workspace (default: $GRARE_ASSET_WORKSPACE or ./grare-assets)
@@ -16,6 +16,9 @@ Options:
   --detector-checkpoint-root DIR   Detector checkpoint root
   --sam-checkpoint FILE            MobileSAM checkpoint
   --point-mae-checkpoint FILE      Point-MAE checkpoint
+  --dump-root DIR                  Frozen-detector dump root
+  --with-dumps                     Also require frozen-detector .npy dumps
+                                   (use before Stage 3 feature construction)
   -h, --help                       Show this help text
 EOF
 }
@@ -25,9 +28,19 @@ graspnet_root="${GRASPNET_ROOT:-}"
 detector_checkpoint_root="${GRARE_DETECTOR_CKPT_ROOT:-}"
 sam_checkpoint="${GRARE_SAM_CKPT:-}"
 point_mae_checkpoint="${GRARE_POINT_MAE_CKPT:-}"
+dump_root="${GRARE_DUMP_ROOT:-}"
+with_dumps=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --dump-root)
+      dump_root="$2"
+      shift 2
+      ;;
+    --with-dumps)
+      with_dumps=true
+      shift
+      ;;
     --workspace)
       workspace="$2"
       shift 2
@@ -64,6 +77,7 @@ graspnet_root="${graspnet_root:-$workspace/graspnet}"
 detector_checkpoint_root="${detector_checkpoint_root:-$workspace/detector_checkpoints}"
 sam_checkpoint="${sam_checkpoint:-$workspace/backbones/mobile_sam.pt}"
 point_mae_checkpoint="${point_mae_checkpoint:-$workspace/backbones/point_mae_pretrain.pth}"
+dump_root="${dump_root:-$workspace/detector_dumps}"
 
 failed=0
 checked=0
@@ -99,6 +113,16 @@ check_file 'GN Kinect checkpoint' "$detector_checkpoint_root/graspnet_baseline/c
 check_file 'SBG RealSense checkpoint' "$detector_checkpoint_root/scale_balanced_grasp/log_full_model/checkpoint.tar"
 check_file 'EG RealSense checkpoint' "$detector_checkpoint_root/economicgrasp/economicgrasp_realsense.tar"
 check_file 'EG Kinect checkpoint' "$detector_checkpoint_root/economicgrasp/economicgrasp_kinect.tar"
+
+if [[ "$with_dumps" == true ]]; then
+  if find "$dump_root" -type f -name '*.npy' -print -quit 2>/dev/null | grep -q .; then
+    printf 'ok: %s\n' 'frozen-detector dumps'
+    checked=$((checked + 1))
+  else
+    printf 'MISSING: frozen-detector .npy dumps under: %s\n' "$dump_root" >&2
+    failed=1
+  fi
+fi
 
 if [[ "$failed" -ne 0 ]]; then
   exit 1

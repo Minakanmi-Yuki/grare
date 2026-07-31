@@ -13,8 +13,17 @@ GraRe and its feature-construction dependencies:
 python -m pip install -e '.[test,prepare]'
 ```
 
-Install the public GraspNet API and its `grasp_nms` extension separately. The
-official projects and licenses are listed in [../DEPENDENCIES.md](../DEPENDENCIES.md).
+The official GraspNet API is not on PyPI, so install it from its repository
+before running `grare-prepare` or `grare-evaluate`; both stages require it:
+
+```bash
+git clone https://github.com/graspnet/graspnetAPI ../graspnetAPI
+python -m pip install -e ../graspnetAPI
+python -m pip install grasp_nms
+```
+
+The official projects and licenses are listed in
+[../DEPENDENCIES.md](../DEPENDENCIES.md).
 
 ## 2. Obtain inputs
 
@@ -40,22 +49,30 @@ test -d "$GRASPNET_ROOT/scenes" && echo "GraspNet-1Billion is ready"
 
 ### 2.2 Add feature-construction inputs later
 
-When beginning Stage 3, download the public backbone checkpoints, run each
-frozen detector using its upstream implementation, and retain its raw `(K, 17)`
-candidate dump for every frame under `grare-assets/detector_dumps/` (or retain
-the dumps elsewhere). GraRe never changes candidate identities, poses, widths,
+When beginning Stage 3, obtain the backbone weights and the frozen-detector
+checkpoints from their official sources, then generate a raw `(K, 17)`
+candidate dump for every frame with `grare-dump`:
+
+```bash
+grare-dump --detector graspnet_baseline --camera realsense --split train
+grare-dump --detector graspnet_baseline --camera realsense --split test
+```
+
+Pass `--deterministic` when you need bit-reproducible dumps; the upstream
+detectors otherwise vary the confidence column by about `1e-4` between runs
+without changing grasp poses or candidate-set size.
+
+GraRe never changes candidate identities, poses, widths,
 or candidate-set size. The exact dump contract is in
 [../DATA_FORMAT.md](../DATA_FORMAT.md). The corresponding upstream projects
 are listed in [../DEPENDENCIES.md](../DEPENDENCIES.md).
 
-At that point, download the backbones and validate the complete
-feature-construction input set:
+Download the MobileSAM and Point-MAE weights from their official sources as
+listed in the root [README Downloads](../README.md#downloads) section, then
+validate the complete feature-construction input set:
 
 ```bash
-./scripts/prepare_data_assets.sh \
-  --workspace "$GRARE_ASSET_WORKSPACE" \
-  --download-backbones \
-  --check
+./scripts/check_downloaded_assets.sh --with-dumps
 ```
 
 ## 3. Construct features

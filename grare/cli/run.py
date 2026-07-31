@@ -107,10 +107,28 @@ def _train_command(config: dict[str, Any]) -> list[str]:
     return command
 
 
+def _is_detector_baseline(config: dict[str, Any]) -> bool:
+    """A lambda=0.0 run keeps the detector's own ranking (the AP baseline)."""
+    return float(config["rerank"]["lambda"]) == 0.0
+
+
+def _stage_dir(config: dict[str, Any], key: str) -> Path:
+    """Keep detector-baseline artifacts out of the GraRe artifact directories.
+
+    Both runs consume the same features and checkpoint, so writing them to the
+    same rerank/eval directories would silently overwrite the GraRe results the
+    baseline is meant to be compared against.
+    """
+    directory = Path(config["paths"][key])
+    if _is_detector_baseline(config):
+        return directory.with_name(directory.name + "_detector_baseline")
+    return directory
+
+
 def _rerank_command(config: dict[str, Any]) -> list[str]:
     paths = config["paths"]
     rerank = config["rerank"]
-    output = Path(paths["rerank_dir"])
+    output = _stage_dir(config, "rerank_dir")
     return _module_command("grare.cli.rerank") + [
         "--input-root", paths["local_cloud_test"],
         "--camera", config["camera"],
@@ -128,16 +146,19 @@ def _rerank_command(config: dict[str, Any]) -> list[str]:
 
 def _eval_command(config: dict[str, Any]) -> list[str]:
     paths = config["paths"]
-    output = Path(paths["eval_dir"])
+    output = _stage_dir(config, "eval_dir")
+    tag = config["name"]
+    if _is_detector_baseline(config):
+        tag = f"{tag}_detector_baseline"
     return _module_command("grare.cli.evaluate") + [
         "--dataset-root", paths["graspnet_root"],
-        "--dump-folder", paths["rerank_dir"],
+        "--dump-folder", str(_stage_dir(config, "rerank_dir")),
         "--camera", config["camera"],
         "--split", "test",
         "--proc", str(config["eval"]["proc"]),
         "--save-raw", str(output / "per_scene_raw.npy"),
         "--save-summary", str(output / "per_scene_raw.json"),
-        "--tag", config["name"],
+        "--tag", tag,
     ]
 
 
