@@ -62,8 +62,13 @@ python -m pip install \
 python -m pip install -e '.[test]'
 ```
 
-At this point `grare-smoke` and `python -m pytest -q` already work, so you can
-verify the installation before downloading any data.
+Verify the installation now, before downloading any data. Both commands run on
+CPU and need no dataset:
+
+```bash
+grare-smoke
+python -m pytest -q
+```
 
 Feature preparation and official AP evaluation additionally require the
 official [GraspNet API](https://github.com/graspnet/graspnetAPI) and
@@ -197,23 +202,6 @@ dumps:
 ./scripts/check_downloaded_assets.sh
 ```
 
-## Reproduction Stages
-
-The remaining sections run in order. Each has a gate; do not continue past a
-failing one.
-
-| Stage | Section | Needs GPU? | Gate |
-| --- | --- | --- | --- |
-| 1 | [Installation](#installation) | No | `grare-smoke` and `python -m pytest -q` pass |
-| 2 | [Downloads](#downloads) | No | `./scripts/check_downloaded_assets.sh` passes |
-| 3 | [Prepare](#prepare) | Yes | `./scripts/check_downloaded_assets.sh --with-dumps` passes and `object_pooled/` exists |
-| 4 | [Train](#train) | Yes | `best.pt` and re-ranked `.npy` files exist |
-| 5 | [Evaluate](#evaluate) | Yes | `per_scene_raw.npy` exists for a complete test dump |
-| 6 | [Reported Results](#reported-results) | No | measured AP is compared with the reported tables |
-
-Stages 1 and 2 need no GPU, so the installation can be validated before any
-data is downloaded.
-
 ## Prepare
 
 First, run each frozen detector with its downloaded checkpoint on the GraspNet
@@ -324,7 +312,8 @@ paper configuration.
 
 ## Train
 
-The package provides five main configurations, one per reported setting:
+Training and everything after it need a GPU. The package provides five main
+configurations, one per reported setting:
 
 | Config | Frozen detector | Camera |
 | --- | --- | --- |
