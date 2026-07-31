@@ -149,9 +149,16 @@ license and terms. GraRe never downloads or redistributes them.
 | EG checkpoints | [EconomicGrasp v1 release](https://github.com/iSEE-Laboratory/EconomicGrasp/releases/tag/v1) | `$GRARE_DETECTOR_CKPT_ROOT/economicgrasp/` |
 
 Extract the GraspNet archives so that `$GRASPNET_ROOT/scenes`,
-`$GRASPNET_ROOT/models`, and `$GRASPNET_ROOT/dex_models` all exist.
-`dex_models/` holds the Dex-Net models that the official API uses for the
-analytical force-closure labels, so `grare-prepare` fails without it.
+`$GRASPNET_ROOT/models`, and `$GRASPNET_ROOT/dex_models` all exist, and make
+sure `dex_models/` actually contains its `.pkl` files. It holds the prebuilt
+Dex-Net caches the official API uses for the analytical force-closure labels.
+Without them the API rebuilds each model through a code path that calls
+`np.int`, which NumPy 2.x removed, so `grare-prepare` fails.
+
+`grare-prepare` also constructs the official API over the whole split, which
+reads `scenes/scene_XXXX/object_id_list.txt` for **every** scene in that split
+even when you only process a few frames. A partial dataset therefore needs at
+least that file present for all 100 train or 90 test scenes.
 
 Rename the two backbone weights to `mobile_sam.pt` and
 `point_mae_pretrain.pth`; the Point-MAE release asset is named `pretrain.pth`

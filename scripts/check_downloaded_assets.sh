@@ -83,14 +83,21 @@ failed=0
 checked=0
 
 check_dir() {
-  local label="$1" path="$2"
-  if [[ -d "$path" ]]; then
-    printf 'ok: %s\n' "$label"
-    checked=$((checked + 1))
-  else
+  local label="$1" path="$2" pattern="${3:-*}"
+  if [[ ! -d "$path" ]]; then
     printf 'MISSING: %s: %s\n' "$label" "$path" >&2
     failed=1
+    return
   fi
+  # An empty directory is not a usable asset: the workspace script creates the
+  # tree up front, so existence alone says nothing about the download.
+  if ! find "$path" -mindepth 1 -name "$pattern" -print -quit 2>/dev/null | grep -q .; then
+    printf 'MISSING: %s is empty (expected %s): %s\n' "$label" "$pattern" "$path" >&2
+    failed=1
+    return
+  fi
+  printf 'ok: %s\n' "$label"
+  checked=$((checked + 1))
 }
 
 check_file() {
@@ -104,11 +111,11 @@ check_file() {
   fi
 }
 
-check_dir 'GraspNet scenes' "$graspnet_root/scenes"
-check_dir 'GraspNet models' "$graspnet_root/models"
-# The official API reads dex_models/ for the analytical force-closure labels,
-# so grare-prepare fails without it.
-check_dir 'GraspNet dex_models' "$graspnet_root/dex_models"
+check_dir 'GraspNet scenes' "$graspnet_root/scenes" 'scene_*'
+check_dir 'GraspNet models' "$graspnet_root/models" 'nontextured.ply'
+# grare-prepare needs the prebuilt Dex-Net caches. Without them the official API
+# falls back to a code path that uses np.int, which NumPy 2.x removed.
+check_dir 'GraspNet dex_models' "$graspnet_root/dex_models" '*.pkl'
 check_file 'MobileSAM weight' "$sam_checkpoint"
 check_file 'Point-MAE weight' "$point_mae_checkpoint"
 check_file 'GN RealSense checkpoint' "$detector_checkpoint_root/graspnet_baseline/checkpoint-rs.tar"
