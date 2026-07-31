@@ -173,12 +173,49 @@ Scale-Balanced-Grasp link opens a Drive folder rather than a file, and the
 `log_full_model/checkpoint.tar` name comes from its own `command_test.sh`.
 EconomicGrasp attaches both weights to its v1 release page directly.
 
-Extract the GraspNet archives so that `$GRASPNET_ROOT/scenes`,
-`$GRASPNET_ROOT/models`, and `$GRASPNET_ROOT/dex_models` all exist, and make
-sure `dex_models/` actually contains its `.pkl` files. It holds the prebuilt
-Dex-Net caches the official API uses for the analytical force-closure labels.
-Without them the API rebuilds each model through a code path that calls
-`np.int`, which NumPy 2.x removed, so `grare-prepare` fails.
+### Extracting GraspNet-1Billion
+
+The download page offers one archive per split rather than a single dataset
+tree, so extract them into a shared `$GRASPNET_ROOT` and let their `scenes/`
+directories merge. GraRe needs these five archives:
+
+| Archive | Extracts to | Contents |
+| --- | --- | --- |
+| `train_1.zip` … `train_4.zip` | `scenes/scene_0000` … `scene_0099` | train scenes |
+| `test_seen.zip` | `scenes/scene_0100` … `scene_0129` | Seen test scenes |
+| `test_similar.zip` | `scenes/scene_0130` … `scene_0159` | Similar test scenes |
+| `test_novel.zip` | `scenes/scene_0160` … `scene_0189` | Novel test scenes |
+| `models.zip` | `models/` | object meshes |
+| `dex_models.zip` | `dex_models/` | Dex-Net caches |
+
+For example, with every archive in one directory:
+
+```bash
+mkdir -p "$GRASPNET_ROOT"
+for archive in train_1 train_2 train_3 train_4 test_seen test_similar test_novel models dex_models; do
+  unzip -q -n "$archive.zip" -d "$GRASPNET_ROOT"
+done
+```
+
+The result must be `$GRASPNET_ROOT/scenes` with 190 `scene_XXXX` directories,
+plus `models/` and `dex_models/`:
+
+```bash
+ls "$GRASPNET_ROOT"                     # scenes  models  dex_models
+ls "$GRASPNET_ROOT/scenes" | wc -l      # 190
+```
+
+If an archive expands into a nested directory such as `train_1/scenes/`, move
+the `scenes/` contents up so all 190 scenes share one `scenes/` directory.
+
+`grasp_label.zip`, `collision_label.zip`, and `rect_labels.zip` are needed only
+to train a detector from scratch. GraRe re-ranks frozen detector outputs, so it
+does not read them.
+
+The download page marks `dex_models.zip` as optional, but GraRe requires it: it
+holds the prebuilt Dex-Net caches the official API uses for the analytical
+force-closure labels. Without them the API rebuilds each model through a code
+path that calls `np.int`, which NumPy 2.x removed, so `grare-prepare` fails.
 
 `grare-prepare` also constructs the official API over the whole split, which
 reads `scenes/scene_XXXX/object_id_list.txt` for **every** scene in that split
@@ -195,9 +232,14 @@ The downloaded assets should be arranged as follows:
 ```text
 $GRARE_ASSET_WORKSPACE/
 ├── graspnet/                                      GraspNet-1Billion
-│   ├── scenes/                                     RGB-D frames and labels
-│   ├── models/                                     object meshes
-│   └── dex_models/                                 Dex-Net models for labeling
+│   ├── scenes/                                     190 scene_XXXX directories
+│   │   ├── scene_0000/                              train: 0000-0099
+│   │   │   ├── realsense/                            rgb, depth, label, meta
+│   │   │   ├── kinect/
+│   │   │   └── object_id_list.txt
+│   │   └── scene_0189/                              test: 0100-0189
+│   ├── models/                                     object meshes, 000-087
+│   └── dex_models/                                 000.pkl - 087.pkl
 ├── detector_checkpoints/                          frozen detector weights
 │   ├── graspnet_baseline/
 │   │   ├── checkpoint-rs.tar                       GN RealSense
