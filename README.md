@@ -148,20 +148,24 @@ license and terms. GraRe never downloads or redistributes them.
 | SBG checkpoint | [Scale-Balanced-Grasp](https://github.com/mahaoxiang822/Scale-Balanced-Grasp) | `$GRARE_DETECTOR_CKPT_ROOT/scale_balanced_grasp/log_full_model/` |
 | EG checkpoints | [EconomicGrasp v1 release](https://github.com/iSEE-Laboratory/EconomicGrasp/releases/tag/v1) | `$GRARE_DETECTOR_CKPT_ROOT/economicgrasp/` |
 
-Extract the GraspNet archives so that `$GRASPNET_ROOT/scenes` and
-`$GRASPNET_ROOT/models` exist. Rename the two backbone weights to
-`mobile_sam.pt` and `point_mae_pretrain.pth`; the Point-MAE release asset is
-named `pretrain.pth` upstream. The detector checkpoints are needed only to
-regenerate candidate dumps, and each upstream project documents its own
-download location for them.
+Extract the GraspNet archives so that `$GRASPNET_ROOT/scenes`,
+`$GRASPNET_ROOT/models`, and `$GRASPNET_ROOT/dex_models` all exist.
+`dex_models/` holds the Dex-Net models that the official API uses for the
+analytical force-closure labels, so `grare-prepare` fails without it.
+
+Rename the two backbone weights to `mobile_sam.pt` and
+`point_mae_pretrain.pth`; the Point-MAE release asset is named `pretrain.pth`
+upstream. The detector checkpoints are needed only to regenerate candidate
+dumps, and each upstream project documents its own download location for them.
 
 The downloaded assets should be arranged as follows:
 
 ```text
 $GRARE_ASSET_WORKSPACE/
 ├── graspnet/                                      GraspNet-1Billion
-│   ├── scenes/
-│   └── models/
+│   ├── scenes/                                     RGB-D frames and labels
+│   ├── models/                                     object meshes
+│   └── dex_models/                                 Dex-Net models for labeling
 ├── detector_checkpoints/                          frozen detector weights
 │   ├── graspnet_baseline/
 │   │   ├── checkpoint-rs.tar                       GN RealSense

@@ -40,11 +40,12 @@ source "$GRARE_ASSET_WORKSPACE/grare_paths.env"
 
 Download the original dataset from the
 [official GraspNet download page](https://graspnet.net/datasets.html), accept
-its terms, and extract it under `grare-assets/graspnet/`. The required first
-checkpoint is that `$GRASPNET_ROOT/scenes` exists:
+its terms, and extract it under `grare-assets/graspnet/`. Feature construction
+needs `scenes/`, `models/`, and `dex_models/`; the last holds the Dex-Net
+models the official API uses for the analytical force-closure labels:
 
 ```bash
-test -d "$GRASPNET_ROOT/scenes" && echo "GraspNet-1Billion is ready"
+./scripts/check_downloaded_assets.sh
 ```
 
 ### 2.2 Add feature-construction inputs later

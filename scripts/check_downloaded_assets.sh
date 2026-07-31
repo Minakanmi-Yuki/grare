@@ -106,6 +106,9 @@ check_file() {
 
 check_dir 'GraspNet scenes' "$graspnet_root/scenes"
 check_dir 'GraspNet models' "$graspnet_root/models"
+# The official API reads dex_models/ for the analytical force-closure labels,
+# so grare-prepare fails without it.
+check_dir 'GraspNet dex_models' "$graspnet_root/dex_models"
 check_file 'MobileSAM weight' "$sam_checkpoint"
 check_file 'Point-MAE weight' "$point_mae_checkpoint"
 check_file 'GN RealSense checkpoint' "$detector_checkpoint_root/graspnet_baseline/checkpoint-rs.tar"
