@@ -58,9 +58,12 @@ grare-dump --detector graspnet_baseline --camera realsense --split train
 grare-dump --detector graspnet_baseline --camera realsense --split test
 ```
 
-Pass `--deterministic` when you need bit-reproducible dumps; the upstream
-detectors otherwise vary the confidence column by about `1e-4` between runs
-without changing grasp poses or candidate-set size.
+Pass `--deterministic` when you need bit-reproducible dumps on a fixed
+machine; the upstream detectors otherwise vary the confidence column by about
+`1e-4` between runs without changing grasp poses. Across different GPUs or CUDA
+versions the detector outputs shift slightly, and Scale-Balanced-Grasp's score
+threshold can admit or drop a few candidates, so AP reproduced from freshly
+generated dumps can differ marginally from the reported values.
 
 GraRe never changes candidate identities, poses, widths,
 or candidate-set size. The exact dump contract is in

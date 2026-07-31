@@ -202,11 +202,18 @@ grare-dump --detector graspnet_baseline --camera realsense --split train
 grare-dump --detector graspnet_baseline --camera realsense --split test
 ```
 
-Add `--deterministic` for bit-reproducible dumps: the upstream detectors use
-nondeterministic CUDA kernels, so repeated runs otherwise vary the confidence
-column by roughly `1e-4`. Grasp poses and candidate-set size are unaffected
-either way. Use `--dry-run` to preview the upstream command, and
+Add `--deterministic` for bit-reproducible dumps on a fixed machine: the
+upstream detectors use nondeterministic CUDA kernels, so repeated runs
+otherwise vary the confidence column by roughly `1e-4` without changing grasp
+poses. Use `--dry-run` to preview the upstream command, and
 `--index-shard-count`/`--index-shard-id` to spread GN or SBG across GPUs.
+
+Regenerated dumps are not expected to match another machine's dumps exactly.
+GPU model, driver, and CUDA version shift the detector's float outputs
+slightly, and Scale-Balanced-Grasp additionally applies a score threshold, so
+its candidate count can differ by a few grasps between machines. GraRe
+re-ranks whichever candidate set the detector produces, so AP reproduced from
+freshly generated dumps can differ marginally from the reported values.
 
 Dumps are written per detector and split, with the camera below each scene:
 

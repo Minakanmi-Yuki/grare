@@ -3,7 +3,7 @@
 
 Ported from fars-grasp. Reads two upstream source trees:
 
-    GRARE_SBG_ROOT          = ./external/Scale-Balanced-Grasp-src
+    GRARE_SBG_ROOT          = ./external/Scale-Balanced-Grasp
     GRARE_GN_BASELINE_ROOT  = ./external/graspnet-baseline
 
 Override either via env var to point at a clone outside ./external/.
@@ -29,7 +29,7 @@ from tqdm import tqdm
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SBG_ROOT = Path(
-    os.environ.get("GRARE_SBG_ROOT", str(PROJECT_ROOT / "external" / "Scale-Balanced-Grasp-src"))
+    os.environ.get("GRARE_SBG_ROOT", str(PROJECT_ROOT / "external" / "Scale-Balanced-Grasp"))
 ).expanduser()
 GRASPNET_BASELINE_ROOT = Path(
     os.environ.get("GRARE_GN_BASELINE_ROOT", str(PROJECT_ROOT / "external" / "graspnet-baseline"))
