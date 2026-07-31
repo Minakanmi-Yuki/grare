@@ -66,7 +66,7 @@ def resolve_cache_device(
 ) -> torch.device:
     """Resolve where eager dataset tensors are cached.
 
-    The paper configurations cache on CPU: the training features are far larger
+    The reported settings cache on CPU: the training features are far larger
     than GPU memory for EG, and CPU caching keeps DataLoader workers usable.
     """
     if requested not in CACHE_DEVICES:

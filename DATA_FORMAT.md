@@ -25,7 +25,7 @@ The expected directory layout is:
       0000.npy
 ```
 
-The code also accepts `scene_0000/0000.npy`. The paper protocol retains every
+The code also accepts `scene_0000/0000.npy`. The reported protocol keeps every
 candidate emitted by the detector. Candidate identities, widths, poses, and
 set sizes are unchanged by GraRe; only the order and score column are updated.
 

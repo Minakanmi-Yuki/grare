@@ -29,7 +29,7 @@ def _value_after(command: list[str], flag: str) -> str:
     return command[command.index(flag) + 1]
 
 
-def test_paper_lambda_is_accepted() -> None:
+def test_grare_ranking_lambda_is_accepted() -> None:
     validate_config(_config(1.0))
 
 
@@ -43,7 +43,7 @@ def test_unreported_lambda_is_rejected(bad_lambda: float) -> None:
         validate_config(_config(bad_lambda))
 
 
-def test_grare_run_writes_to_paper_directories() -> None:
+def test_grare_run_writes_to_default_directories() -> None:
     config = _config(1.0)
     rerank = _rerank_command(config)
     evaluate = _eval_command(config)
@@ -73,10 +73,10 @@ def test_detector_baseline_does_not_overwrite_grare_artifacts() -> None:
     assert _value_after(evaluate, "--tag") == "gn_realsense_detector_baseline"
     assert _value_after(rerank, "--rescoring-score-weight") == "0.0"
 
-    paper = _config(1.0)
+    reported = _config(1.0)
     assert _value_after(rerank, "--output-root") != _value_after(
-        _rerank_command(paper), "--output-root"
+        _rerank_command(reported), "--output-root"
     )
     assert _value_after(evaluate, "--save-raw") != _value_after(
-        _eval_command(paper), "--save-raw"
+        _eval_command(reported), "--save-raw"
     )

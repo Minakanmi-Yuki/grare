@@ -1,4 +1,4 @@
-"""Small YAML loader used by the paper reproduction entry point."""
+"""YAML configuration loader for grare-run."""
 
 from __future__ import annotations
 
@@ -98,14 +98,14 @@ def validate_config(config: dict[str, Any]) -> None:
     if config["camera"] not in {"realsense", "kinect"}:
         raise ValueError(f"unsupported camera: {config['camera']!r}")
     if int(config["train"]["batch_size"]) != 2048:
-        raise ValueError("paper configurations must use train.batch_size=2048")
-    # lambda=1.0 reproduces the paper's GraRe ranking; lambda=0.0 keeps the
-    # detector's own ranking and is how the detector baseline AP artifacts in
-    # docs/RESULTS.md are produced. Any other value is an unreported setting.
+        raise ValueError("the reported settings require train.batch_size=2048")
+    # lambda=1.0 is the GraRe ranking; lambda=0.0 keeps the detector's own
+    # ranking and produces the detector baseline AP that docs/RESULTS.md
+    # compares against. Any other value is an unreported setting.
     rerank_lambda = float(config["rerank"]["lambda"])
     if rerank_lambda not in {0.0, 1.0}:
         raise ValueError(
-            "paper configurations must use rerank.lambda=1.0 (GraRe ranking) "
+            "the reported settings require rerank.lambda=1.0 (GraRe ranking) "
             "or rerank.lambda=0.0 (detector baseline ranking); "
             f"got {rerank_lambda}"
         )

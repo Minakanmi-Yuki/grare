@@ -1,4 +1,4 @@
-"""Run the paper training, re-ranking, and official-evaluation stages."""
+"""Run the training, re-ranking, and evaluation stages for one configuration."""
 
 from __future__ import annotations
 

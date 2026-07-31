@@ -192,8 +192,8 @@ $GRARE_ASSET_WORKSPACE/
     └── point_mae_pretrain.pth
 ```
 
-The five detector-camera checkpoints above correspond to the five paper
-configurations.
+These five detector-camera checkpoints correspond to the five reported
+settings.
 
 Verify that all downloaded assets are in place before generating candidate
 dumps:
@@ -239,7 +239,7 @@ $GRARE_DUMP_ROOT/$DETECTOR/
 └── test/scene_0100/$CAMERA/0000.npy
 ```
 
-The five paper settings need these dump groups:
+The five reported settings need these dump groups:
 
 ```text
 graspnet_baseline     realsense + kinect
@@ -254,7 +254,7 @@ Once the dumps exist, confirm the complete feature-construction input set:
 ```
 
 Then set the detector once and prepare one split. The defaults in
-`grare-prepare` reproduce the paper's four shells, per-shell sampling budgets,
+`grare-prepare` reproduce the reported four shells, per-shell sampling budgets,
 and 512-point local and object clouds:
 
 ```bash
@@ -308,7 +308,7 @@ $GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/
 ```
 
 Set `DETECTOR` and `CAMERA` to the detector-camera pair used by the selected
-paper configuration.
+configuration you are reproducing.
 
 ## Train
 
@@ -368,15 +368,15 @@ plus a summary and per-frame records to `$GRARE_OUTPUT_ROOT/predictions/<name>/`
 `grare-rerank` consumes the relabeled `.npz` archives from `grare-prepare`, not
 raw detector `.npy` dumps. It keeps every candidate and changes only the order.
 
-To reproduce all five settings, run them sequentially once GN-RealSense works
-and the corresponding features exist:
+Each of the other four settings runs the same way once its features exist.
+Substitute its configuration name, and expect each one to take hours:
 
 ```bash
-./scripts/run_paper_configs.sh --stop-after rerank
+grare-run --config configs/eg_realsense.yaml --stop-after train
 ```
 
-Use `--dry-run` to inspect all five command graphs, or `--set train.seed=11`
-for a different initialization seed.
+Use `--dry-run` to inspect a resolved command graph without touching the GPU,
+or `--set train.seed=11` for a different initialization seed.
 ## Evaluate
 
 Run the official GraspNet evaluator on the re-ranked predictions:
@@ -463,19 +463,21 @@ reproduction target.
 - Objective: continuous friction-margin quality prediction with collision,
   empty-grasp, and object-classification auxiliary losses.
 - Re-ranking: candidate-set z-score normalization and score fusion with
-  `lambda = 1.0` in the paper configurations.
+  `lambda = 1.0` in the reported settings.
 
 ## Release Scope
 
-This repository contains GraRe source code, paper configurations, tests, and
+This repository contains GraRe source code, configurations, tests, and
 documentation. It does not redistribute datasets, detector repositories or
 weights, GraRe checkpoints, or generated predictions. See
-[docs/PUBLICATION_SCOPE.md](docs/PUBLICATION_SCOPE.md) for the release boundary
+[docs/SCOPE.md](docs/SCOPE.md) for the release boundary
 and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for upstream attribution.
 
 ## Reference Guides
 
-- [Configuration reference](configs/README.md)
-- [Detailed offline reproduction](docs/REPRODUCTION.md)
-- [Expected benchmark results](docs/RESULTS.md)
-- [Real-robot result showcase](docs/REAL_ROBOT_RESULTS.md)
+- [Configurations](configs/README.md)
+- [Offline reproduction](docs/REPRODUCTION.md)
+- [Reported results](docs/RESULTS.md)
+- [Real-robot results](docs/REAL_ROBOT_RESULTS.md)
+- [Release scope](docs/SCOPE.md)
+- [Data contract](DATA_FORMAT.md)

@@ -82,7 +82,7 @@ validate the complete feature-construction input set:
 ## 3. Construct features
 
 Run `grare-prepare` once for train dumps and once for test dumps. Use the
-paper shell boundaries `(0, 5, 15, 25, 40)` mm, per-shell budgets
+reported shell boundaries `(0, 5, 15, 25, 40)` mm, per-shell budgets
 `(64, 128, 128, 192)`, and 512 object points. The command in the root
 [README](../README.md#prepare) is the canonical
 invocation.
@@ -105,7 +105,7 @@ README.
 
 ## 4. Train, re-rank, and evaluate
 
-Set the roots referenced by the paper configurations:
+Set the roots referenced by the configurations:
 
 ```bash
 export GRASPNET_ROOT=/path/to/graspnet
@@ -114,11 +114,11 @@ export GRARE_OUTPUT_ROOT=/path/to/grare-output
 export GRARE_POINT_MAE_CKPT=/path/to/point_mae_pretrain.pth
 ```
 
-Run a single setting, or invoke all five sequentially:
+Run one setting at a time. Each takes hours, so stopping after training gives
+a checkpoint gate before predictions are written:
 
 ```bash
-grare-run --config configs/gn_realsense.yaml
-./scripts/run_paper_configs.sh --stop-after train
+grare-run --config configs/gn_realsense.yaml --stop-after train
 ```
 
 `grare-rerank` consumes the relabeled `.npz` archives emitted by
@@ -128,7 +128,7 @@ take raw detector `.npy` dumps directly.
 The official test evaluation is valid only when all 90 test scenes and all 256
 frames per scene have been re-ranked. `grare-evaluate` checks this requirement
 before calling the official GraspNet evaluator. A one-frame or one-scene run
-is useful for debugging but must not be reported as a paper AP.
+is useful for debugging but must not be reported as an AP.
 
 ## Statistical comparison
 
@@ -152,7 +152,7 @@ Novel splits.
 | --- | --- | --- |
 | Unit | `python -m pytest -q` | model, archive, training, and command contracts |
 | Smoke | `grare-smoke` | synthetic train, checkpoint reload, and re-ranking |
-| Configuration | `./scripts/run_paper_configs.sh --dry-run` | all five paper command graphs |
+| Configuration | `grare-run --config ... --dry-run` | a resolved command graph |
 | Full | `grare-run --config ...` | data preparation outputs, training, reranking, and official AP |
 
 Use the complete official test dump for any numerical comparison with the

@@ -306,7 +306,7 @@ def parse_args() -> argparse.Namespace:
         "--cache-device",
         choices=("cpu", "cuda"),
         default="cpu",
-        help="Where eager dataset tensors are cached. The paper configurations use cpu.",
+        help="Where eager dataset tensors are cached. The reported settings use cpu.",
     )
     parser.add_argument(
         "--archive-sample-counts",

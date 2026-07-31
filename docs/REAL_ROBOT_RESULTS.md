@@ -1,4 +1,4 @@
-# Real-Robot Result Showcase
+# Real-Robot Results
 
 The paper evaluates the ordering produced by GraRe on a UR3 robot with a
 RealSense D435 camera and a Robotiq 2F-85 gripper across ten mixed-object

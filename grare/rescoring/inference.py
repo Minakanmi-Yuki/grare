@@ -27,7 +27,7 @@ def rerank_archive(
 
     GraRe preserves the candidate set and writes the fused score back to
     column zero, which is the field used by the official GraspNet evaluator.
-    The paper protocol uses z-score normalization and retains every candidate.
+    The reported protocol uses z-score normalization and keeps every candidate.
     """
     archive_path = Path(archive_path)
     with np.load(archive_path, allow_pickle=True) as archive:

@@ -1,4 +1,4 @@
-# Publication Scope
+# Release Scope
 
 GraRe is released as an offline re-ranking framework for frozen 6-DoF grasp
 detectors. The supported reproducibility target is the GraspNet-1Billion
@@ -8,7 +8,7 @@ workflow described in [REPRODUCTION.md](REPRODUCTION.md).
 
 - GraRe feature construction, training, checkpoint loading, re-ranking, and
   official GraspNet evaluation code.
-- Five paper configurations for GraspNet-Baseline, Scale-Balanced-Grasp, and
+- Five configurations for GraspNet-Baseline, Scale-Balanced-Grasp, and
   EconomicGrasp.
 - Self-contained smoke tests and unit tests.
 - Documentation of expected benchmark and real-robot results.
