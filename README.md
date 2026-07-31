@@ -47,6 +47,10 @@ NumPy 2.4.6 · SciPy 1.18.0 · PyYAML 6.0.3 · OpenCV 4.13.0.92 · timm 1.0.27 �
 
 ## Installation
 
+Use a shell that has not sourced a ROS environment. ROS 2 puts its own
+`site-packages` on `sys.path`, which shadows the NumPy 2.x build GraRe needs and
+injects pytest plugins that fail on unrelated ROS dependencies.
+
 Clone GraRe, create the validated Conda environment, and install the project
 dependencies:
 

@@ -49,4 +49,8 @@ grare = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+# -p no:… keeps third-party pytest plugins from being autoloaded. A sourced ROS 2
+# environment puts its site-packages on sys.path, and its launch_testing plugin
+# registers a pytest11 entry point that pytest then imports, failing on ROS
+# dependencies that have nothing to do with GraRe.
+addopts = "-ra -p no:launch -p no:launch_testing -p no:launch_testing_ros"
