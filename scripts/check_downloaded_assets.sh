@@ -126,7 +126,7 @@ check_file 'EG RealSense checkpoint' "$detector_checkpoint_root/economicgrasp/ec
 check_file 'EG Kinect checkpoint' "$detector_checkpoint_root/economicgrasp/economicgrasp_kinect.tar"
 
 if [[ "$with_dumps" == true ]]; then
-  if find "$dump_root" -type f -name '*.npy' -print -quit 2>/dev/null | grep -q .; then
+  if find -L "$dump_root" -type f -name '*.npy' -print -quit 2>/dev/null | grep -q .; then
     printf 'ok: %s\n' 'frozen-detector dumps'
     checked=$((checked + 1))
   else
