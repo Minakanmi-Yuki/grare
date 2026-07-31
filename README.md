@@ -388,11 +388,40 @@ shells for local geometry, and writes MobileSAM object clouds to the
 `object_cloud/` sidecar. Add `--limit 1` for a one-frame check, then set
 `SPLIT=test` and run the same command again.
 
-Raise `--num-workers` to match the host: this stage runs over every frame of
-every scene, so it dominates preparation time. Values around 12 to 24 are
-reasonable on a many-core machine; beyond that, CPU contention and MobileSAM
-GPU memory usually become the limit. The stage is resumable, so an interrupted
-run can be repeated with the same command.
+This stage runs over every frame of every scene and dominates preparation time.
+It parallelizes with a process pool, so raise `--num-workers` to match the host.
+The stage is resumable: an interrupted run can be repeated with the same command
+and skips the frames it already wrote.
+
+Each worker holds its own MobileSAM model and CUDA context and caches a single
+scene's assets, so more workers cost VRAM and memory as well as CPU. Switching
+scenes evicts that cache and re-reads the scene's `dex_models` entries and object
+meshes, which are far larger than the frames themselves; frames of the same scene
+are grouped into adjacent chunks to keep the cache alive as long as possible.
+
+On a mechanical disk those cache refills are the limiting factor, because several
+workers reading different scenes at once turn them into random I/O. Watch
+`%util` and `await` while a run is in progress and lower `--num-workers` if the
+disk is saturated:
+
+```bash
+iostat -x 2
+```
+
+Putting `dex_models/` and `models/` on an SSD addresses this directly and is
+cheaper than moving the whole dataset, since they are small next to the frames
+but account for most of the repeated reads:
+
+```bash
+# Copy first and verify before removing the original: a cross-filesystem move
+# that is interrupted leaves the data in neither place.
+cp -r "$GRASPNET_ROOT/dex_models" /path/on/ssd/dex_models
+diff -r "$GRASPNET_ROOT/dex_models" /path/on/ssd/dex_models && \
+  rm -rf "$GRASPNET_ROOT/dex_models" && \
+  ln -s /path/on/ssd/dex_models "$GRASPNET_ROOT/dex_models"
+```
+
+With those on an SSD, only the frame reads stay on the mechanical disk.
 
 Precompute the frozen Point-MAE object features for the same split:
 

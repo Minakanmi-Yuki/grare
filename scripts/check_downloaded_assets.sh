@@ -90,8 +90,9 @@ check_dir() {
     return
   fi
   # An empty directory is not a usable asset: the workspace script creates the
-  # tree up front, so existence alone says nothing about the download.
-  if ! find "$path" -mindepth 1 -name "$pattern" -print -quit 2>/dev/null | grep -q .; then
+  # tree up front, so existence alone says nothing about the download. -L follows
+  # symlinks, since these directories are often links to another disk.
+  if ! find -L "$path" -mindepth 1 -name "$pattern" -print -quit 2>/dev/null | grep -q .; then
     printf 'MISSING: %s is empty (expected %s): %s\n' "$label" "$pattern" "$path" >&2
     failed=1
     return
