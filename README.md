@@ -354,68 +354,26 @@ Once the dumps exist, confirm the complete feature-construction input set:
 ./scripts/check_downloaded_assets.sh --with-dumps
 ```
 
-Then set the detector once and prepare one split. The defaults in
-`grare-prepare` reproduce the reported four shells, per-shell sampling budgets,
-and 512-point local and object clouds:
+Then set the detector once and prepare one split. The recommended command
+separates the CPU labels pass from the single-GPU SAM pass. It reproduces the
+reported four shells, per-shell sampling budgets, and 512-point clouds:
 
 ```bash
 DETECTOR=graspnet_baseline
 CAMERA=realsense
 SPLIT=train
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 
-grare-prepare \
-  --input-root "$GRARE_DUMP_ROOT/$DETECTOR/$SPLIT" \
-  --pattern "scene_*/$CAMERA/*.npy" \
-  --input-format detector-dump \
-  --num-workers 12 \
-  --output-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/local_cloud/$SPLIT" \
-  --object-cloud-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/object_cloud/$SPLIT" \
-  --detector "$DETECTOR" \
-  --dataset-root "$GRASPNET_ROOT" \
-  --camera "$CAMERA" \
-  --split "$SPLIT" \
-  --sam-checkpoint "$GRARE_SAM_CKPT" \
-  --omit-object-cloud
-```
-
-This preserves candidate attributes in `local_cloud/`, samples four radial
-shells for local geometry, and writes MobileSAM object clouds to the
-`object_cloud/` sidecar. Add `--limit 1` for a one-frame check, then set
-`SPLIT=test` and run the same command again.
-
-This stage runs over every frame of every scene and dominates preparation time.
-It parallelizes with a process pool, so raise `--num-workers` to match the host.
-The stage is resumable: an interrupted run can be repeated with the same command
-and skips the frames it already wrote.
-
-Progress is reported every 30 seconds as a JSON line with the archive count,
-percentage, rate, and ETA, counted from the archives already on disk so it
-advances even mid-batch. Set `GRARE_PREPARE_LOG_EVERY_SEC` to report more often,
-and `GRARE_PREPARE_CHUNK_SIZE` to change how many frames a worker takes per task
-(smaller rebalances better across workers, larger reuses a cached scene longer).
-
-### Splitting the CPU and GPU work
-
-The command above does three things per frame in one process: the analytic
-labels and local geometry on CPU, then the MobileSAM object cloud on GPU. Only
-one of the two is busy at a time, so neither the CPU nor the GPU is well used and
-a single `--num-workers` has to serve both.
-
-`--stage` splits them so each runs at its own concurrency. Use a high worker
-count for the CPU pass and a lower one for the GPU pass, which is bounded by
-VRAM:
-
-```bash
-# CPU: analytic labels and shell-wise local geometry, no SAM
-grare-prepare --stage labels --num-workers 24 \
+# CPU: analytic labels and local geometry
+grare-prepare --stage labels --num-workers 8 \
   --input-root "$GRARE_DUMP_ROOT/$DETECTOR/$SPLIT" \
   --pattern "scene_*/$CAMERA/*.npy" --input-format detector-dump \
   --output-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/local_cloud/$SPLIT" \
   --detector "$DETECTOR" --dataset-root "$GRASPNET_ROOT" \
   --camera "$CAMERA" --split "$SPLIT" --omit-object-cloud
 
-# GPU: add the SAM object cloud to those archives
-grare-prepare --stage object --num-workers 12 \
+# GPU: add MobileSAM object clouds (one worker on a single GPU)
+grare-prepare --stage object --num-workers 1 \
   --input-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/local_cloud/$SPLIT" \
   --output-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/local_cloud/$SPLIT" \
   --object-cloud-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/object_cloud/$SPLIT" \
@@ -424,16 +382,40 @@ grare-prepare --stage object --num-workers 12 \
   --sam-checkpoint "$GRARE_SAM_CKPT" --omit-object-cloud
 ```
 
+The process is resumable: rerunning the same commands skips archives already
+written. Add `--limit 1` to the labels command for a one-frame smoke test, then
+set `SPLIT=test` for the test split.
+
+This stage runs over every frame of every scene and dominates preparation time.
+For the current container (25 CPU quota but roughly 96 GB cgroup memory), use
+eight labels workers: each worker owns a GraspNet/Dex-Net scene cache, so CPU
+quota is not a safe memory limit. Keep the NumPy/BLAS pools at one thread per
+process. The stage is resumable: an interrupted run can be repeated with the
+same command and skips the frames it already wrote.
+
+Progress is reported every 30 seconds as a JSON line with the archive count,
+percentage, rate, and ETA, counted from the archives already on disk so it
+advances even mid-batch. Set `GRARE_PREPARE_LOG_EVERY_SEC` to report more often.
+The default `GRARE_PREPARE_CHUNK_SIZE=256` keeps each standard GraspNet scene in
+one task; smaller values increase repeated scene-cache loading.
+
 `--stage labels` keeps SAM off even if a checkpoint is passed, so it never
 touches the GPU. `--stage object` reuses the labels already on disk and only adds
 the object cloud. The two stages together produce byte-identical archives to the
 single-pass command, so pick whichever fits the host.
 
-Each worker holds its own MobileSAM model and CUDA context and caches a single
-scene's assets, so more workers cost VRAM and memory as well as CPU. Switching
+Each object-stage worker holds its own MobileSAM model and CUDA context, so on a
+single-GPU machine `--num-workers 12` creates twelve model copies and can OOM or
+appear to hang. The prepare command now caps labels workers at both the
+effective CPU quota and a memory-safe default of eight (override deliberately
+with `GRARE_PREPARE_MAX_LABEL_WORKERS`), and caps CUDA SAM workers at the number
+of visible GPUs. Switching
 scenes evicts that cache and re-reads the scene's `dex_models` entries and object
 meshes, which are far larger than the frames themselves; frames of the same scene
-are grouped into adjacent chunks to keep the cache alive as long as possible.
+are grouped into scene-sized chunks (256 frames for the standard GraspNet layout)
+to keep the cache alive and avoid reloading the same meshes in multiple workers.
+Override this with `GRARE_PREPARE_CHUNK_SIZE` only for an unusual layout or a
+smoke test; smaller values increase repeated scene loading.
 
 On a mechanical disk those cache refills are the limiting factor, because several
 workers reading different scenes at once turn them into random I/O. Watch

@@ -60,10 +60,13 @@ FEATURE_MAX_CHUNKS_PER_CHILD = 64
 MEMORY_RELEASE_INTERVAL = 8
 _PROGRESS_LOG_INTERVAL_SEC = float(os.environ.get("GRARE_PREPARE_LOG_EVERY_SEC", "30"))
 _PROGRESS_POLL_SEC = 5.0
-# Frames per pool task. Smaller chunks report progress sooner and rebalance
-# better across workers; larger chunks reuse a cached scene for longer.
-RELABEL_CHUNK_SIZE = int(os.environ.get("GRARE_PREPARE_CHUNK_SIZE", "8"))
-FEATURE_CHUNK_SIZE = int(os.environ.get("GRARE_PREPARE_CHUNK_SIZE", "8"))
+# Frames per pool task. GraspNet scenes contain 256 frames per camera. Keeping
+# a complete scene in one task is important: each worker owns a scene/Dex-Net
+# cache, so splitting one scene into many small tasks makes different workers
+# repeatedly voxelize and reload the same meshes, multiplying CPU, RAM and I/O.
+# Override for unusual datasets or for a small smoke test.
+RELABEL_CHUNK_SIZE = int(os.environ.get("GRARE_PREPARE_CHUNK_SIZE", "256"))
+FEATURE_CHUNK_SIZE = int(os.environ.get("GRARE_PREPARE_CHUNK_SIZE", "256"))
 
 
 def _require_graspnet_api() -> None:
@@ -1146,7 +1149,14 @@ class _BaseLabelBackend:
             self._scene_object_cache.clear()
             self._scene_object_cache_order.clear()
         if release_memory:
-            _release_python_and_torch_memory()
+            # Labels are CPU-only. Avoid importing/probing torch.cuda in every
+            # labels worker: that initializes CUDA (and can emit warnings) even
+            # though this stage never uses the GPU. The object/SAM stage opts
+            # into CUDA cache release below.
+            sam_device = str(self.config.sam.device).strip().lower()
+            _release_python_and_torch_memory(
+                release_cuda=self.config.sam.enabled and sam_device.startswith("cuda")
+            )
 
     def _prune_scene_cache(self) -> None:
         for cache, order in (
@@ -1811,8 +1821,10 @@ def _flatten_camera_dir_enabled() -> bool:
     return raw.strip().lower() not in {"", "0", "false", "no", "off"}
 
 
-def _release_python_and_torch_memory() -> None:
+def _release_python_and_torch_memory(*, release_cuda: bool = False) -> None:
     gc.collect()
+    if not release_cuda:
+        return
     import torch
 
     if torch.cuda.is_available():

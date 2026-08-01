@@ -20,6 +20,7 @@ from grare.utils.experiment_logging import (
 )
 from grare.relabeling.manifest import build_archive_manifest
 from grare.relabeling.archive_io import normalize_archive_format
+from grare.utils.cpu import effective_cpu_count
 
 
 def _scene_name_from_archive_path(path: Path) -> str:
@@ -170,6 +171,12 @@ def main() -> int:
         cluster_radius_m=float(args.sam_cluster_radius_m),
         prompt_batch_size=int(args.sam_prompt_batch_size),
     )
+    effective_num_workers = _effective_prepare_workers(
+        args.num_workers,
+        stage=args.stage,
+        sam_device=args.sam_device,
+        sam_enabled=sam_enabled,
+    )
     relabeler = BatchAnalyticRelabeler(
         SceneLabelingConfig(
             detector=args.detector,
@@ -196,7 +203,7 @@ def main() -> int:
             pattern=input_pattern,
             limit=args.limit,
             skip_existing=not args.overwrite,
-            num_workers=args.num_workers,
+            num_workers=effective_num_workers,
             object_cloud_root=args.object_cloud_root,
             include_object_cloud=not args.omit_object_cloud,
         )
@@ -207,7 +214,7 @@ def main() -> int:
             pattern=input_pattern,
             limit=args.limit,
             skip_existing=not args.overwrite,
-            num_workers=args.num_workers,
+            num_workers=effective_num_workers,
             object_cloud_root=args.object_cloud_root,
             include_object_cloud=not args.omit_object_cloud,
         )
@@ -218,7 +225,7 @@ def main() -> int:
             pattern=input_pattern,
             limit=args.limit,
             skip_existing=not args.overwrite,
-            num_workers=args.num_workers,
+            num_workers=effective_num_workers,
         )
     manifest_payload = None
     if not args.no_manifest:
@@ -228,7 +235,7 @@ def main() -> int:
             summary_path=args.manifest_summary_path,
             pattern=output_pattern,
             success_mu_thresh=args.success_mu_thresh,
-            num_workers=max(1, min(args.num_workers, 16)),
+            num_workers=max(1, min(effective_num_workers, 16)),
             show_progress=True,
         )
         manifest_payload = {
@@ -263,7 +270,8 @@ def main() -> int:
         "pattern": input_pattern,
         "output_pattern": output_pattern,
         "limit": args.limit,
-        "num_workers": args.num_workers,
+        "num_workers_requested": args.num_workers,
+        "num_workers": effective_num_workers,
         "overwrite": bool(args.overwrite),
         "archive_format": normalize_archive_format(args.archive_format),
         "summary_mode": args.summary_mode,
@@ -294,6 +302,59 @@ def _output_pattern_for_input_pattern(pattern: str) -> str:
     if pattern.endswith(".npy"):
         return f"{pattern[:-4]}.npz"
     return pattern
+
+
+def _visible_cuda_device_count() -> int:
+    visible = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if visible:
+        devices = [token.strip() for token in visible.split(",") if token.strip()]
+        if devices:
+            return len(devices)
+    try:
+        import torch
+
+        return int(torch.cuda.device_count())
+    except Exception:
+        return 0
+
+
+def _label_worker_cap() -> int:
+    """Memory-safe default for GraspNet/Dex-Net relabel workers.
+
+    A relabel worker owns a GraspNetEval instance and a scene/Dex-Net cache;
+    CPU quota alone is therefore not a safe upper bound. The cap can be raised
+    deliberately for a larger-memory host with GRARE_PREPARE_MAX_LABEL_WORKERS.
+    """
+    raw = os.environ.get("GRARE_PREPARE_MAX_LABEL_WORKERS", "8")
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 8
+
+
+def _effective_prepare_workers(requested: int, *, stage: str, sam_device: str, sam_enabled: bool) -> int:
+    """Prevent process oversubscription and one-GPU MobileSAM replication."""
+    requested = max(1, int(requested))
+    if sam_enabled and str(sam_device).strip().lower().startswith("cuda"):
+        # Each worker owns a complete MobileSAM model and CUDA context. More
+        # workers than visible GPUs replicate the model and commonly OOM or
+        # deadlock on a single-GPU container.
+        limit = max(1, _visible_cuda_device_count())
+        reason = "visible GPU count for CUDA-backed SAM"
+    else:
+        limit = max(1, effective_cpu_count())
+        reason = "effective CPU quota"
+        if stage == "labels":
+            limit = min(limit, _label_worker_cap())
+            reason += " and memory-safe labels cap"
+    effective = min(requested, limit)
+    if effective < requested:
+        print(
+            f"[prepare] limiting --num-workers from {requested} to {effective} "
+            f"({reason}; stage={stage})",
+            flush=True,
+        )
+    return effective
 
 
 def _summarize_relabeled_outputs(
