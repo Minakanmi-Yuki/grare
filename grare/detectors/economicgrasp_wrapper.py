@@ -14,17 +14,18 @@ class EconomicGraspConfig:
     camera: str = "kinect"
     split: str = "test"
     modes: tuple[str, ...] = ("seen", "similar", "novel")
-    batch_size: int = 4
-    data_workers: int = 4
+    batch_size: int = 24
+    data_workers: int = 8
     prefetch_factor: int = 4
-    pin_memory: bool = False
+    pin_memory: bool = True
     persistent_workers: bool = True
     num_point: int = 20000
     collision_thresh: float = 0.0
     voxel_size: float = 0.005
     inference: bool = True
     evaluate: bool = False
-    skip_existing: bool = False
+    skip_existing: bool = True
+    postprocess_workers: int = 32
     max_batches: int | None = None
     tf32: bool = True
     cudnn_benchmark: bool = True
@@ -67,6 +68,8 @@ class EconomicGraspWrapper(BaseDetectorWrapper):
             str(self.config.data_workers),
             "--prefetch-factor",
             str(self.config.prefetch_factor),
+            "--postprocess-workers",
+            str(self.config.postprocess_workers),
             "--collision_thresh",
             str(self.config.collision_thresh),
             "--voxel_size",
@@ -80,10 +83,14 @@ class EconomicGraspWrapper(BaseDetectorWrapper):
             command.append("--deterministic")
         if self.config.pin_memory:
             command.append("--pin-memory")
+        else:
+            command.append("--no-pin-memory")
         if not self.config.persistent_workers:
             command.append("--no-persistent-workers")
         if self.config.skip_existing:
             command.append("--skip-existing")
+        else:
+            command.append("--no-skip-existing")
         if self.config.max_batches is not None:
             command += ["--max_batches", str(self.config.max_batches)]
         if self.config.tf32:

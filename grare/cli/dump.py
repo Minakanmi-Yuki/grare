@@ -78,6 +78,11 @@ def _default_workers() -> int:
     return max(1, min(6, effective_cpu_count()))
 
 
+def _configured(value, config_cls, field: str):
+    """Use an explicit CLI value, otherwise the detector config default."""
+    return getattr(config_cls, field) if value is None else value
+
+
 def _default_dump_root() -> Path:
     env_dump = os.environ.get("GRARE_DUMP_ROOT")
     if env_dump:
@@ -121,17 +126,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--python-bin", default=sys.executable)
     parser.add_argument("--save-summary", default=None, help="Persist run summary JSON to this path.")
     parser.add_argument("--dry-run", action="store_true", help="Print the upstream command, do not execute.")
-    parser.add_argument("--skip-existing", action="store_true", help="Skip frames whose .npy dump already exists.")
+    parser.add_argument(
+        "--skip-existing",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Skip frames whose .npy dump already exists (default from detector config).",
+    )
     parser.add_argument("--batch-size", type=int, default=None, help="Detector inference batch size.")
     parser.add_argument("--data-workers", type=int, default=None, help="DataLoader workers for detector inference.")
-    parser.add_argument("--prefetch-factor", type=int, default=4, help="DataLoader prefetch factor when workers > 0.")
+    parser.add_argument("--prefetch-factor", type=int, default=None, help="DataLoader prefetch factor when workers > 0.")
     parser.add_argument(
         "--postprocess-workers",
         type=int,
-        default=0,
-        help="CPU threads for collision filtering and saving in the GN and SBG adapters.",
+        default=None,
+        help="CPU threads for collision filtering and saving (default from detector config).",
     )
-    parser.add_argument("--pin-memory", action="store_true", help="Enable DataLoader pin_memory when CUDA is available.")
+    parser.add_argument(
+        "--pin-memory",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable DataLoader pin_memory when CUDA is available (default from detector config).",
+    )
     parser.add_argument("--no-persistent-workers", action="store_true", help="Disable persistent DataLoader workers.")
     parser.add_argument("--max-batches", type=int, default=None, help="Stop after N batches. Intended for smoke tests.")
     parser.add_argument("--index-shard-count", type=int, default=1, help="Split dump indices into N shards.")
@@ -206,52 +221,55 @@ def _build_wrapper(args: argparse.Namespace, dataset_root: Path, ckpt: Path, rep
         overrides["collision_thresh"] = float(args.collision_thresh)
     if args.voxel_size is not None:
         overrides["voxel_size"] = float(args.voxel_size)
-    common = {
-        **overrides,
-        "dataset_root": str(dataset_root),
-        "checkpoint_path": str(ckpt),
-        "camera": args.camera,
-        "split": args.split,
-        "prefetch_factor": args.prefetch_factor,
-        "pin_memory": args.pin_memory,
-        "persistent_workers": persistent_workers,
-        "seed": args.seed,
-        "deterministic": args.deterministic,
-        "skip_existing": args.skip_existing,
-        "max_batches": args.max_batches,
-    }
     wrapper_kwargs = {
         "repo_root": repo_root,
         "python_bin": args.python_bin,
         "cuda_device": args.cuda_device,
     }
 
+    def common_for(config_cls):
+        return {
+            **overrides,
+            "dataset_root": str(dataset_root),
+            "checkpoint_path": str(ckpt),
+            "camera": args.camera,
+            "split": args.split,
+            "prefetch_factor": _configured(args.prefetch_factor, config_cls, "prefetch_factor"),
+            "pin_memory": _configured(args.pin_memory, config_cls, "pin_memory"),
+            "persistent_workers": persistent_workers,
+            "seed": args.seed,
+            "deterministic": args.deterministic,
+            "skip_existing": _configured(args.skip_existing, config_cls, "skip_existing"),
+            "max_batches": args.max_batches,
+        }
+
     if args.detector == "graspnet_baseline":
         config = GraspNetBaselineConfig(
-            batch_size=args.batch_size if args.batch_size is not None else 1,
-            num_workers=args.data_workers if args.data_workers is not None else _default_workers(),
-            postprocess_workers=args.postprocess_workers,
+            batch_size=_configured(args.batch_size, GraspNetBaselineConfig, "batch_size"),
+            num_workers=_configured(args.data_workers, GraspNetBaselineConfig, "num_workers"),
+            postprocess_workers=_configured(args.postprocess_workers, GraspNetBaselineConfig, "postprocess_workers"),
             index_shard_count=args.index_shard_count,
             index_shard_id=args.index_shard_id,
-            **common,
+            **common_for(GraspNetBaselineConfig),
         )
         return GraspNetBaselineWrapper(config, **wrapper_kwargs)
 
     if args.detector == "scale_balanced_grasp":
         config = ScaleBalancedGraspConfig(
-            batch_size=args.batch_size if args.batch_size is not None else 1,
-            data_workers=args.data_workers if args.data_workers is not None else _default_workers(),
-            postprocess_workers=args.postprocess_workers,
+            batch_size=_configured(args.batch_size, ScaleBalancedGraspConfig, "batch_size"),
+            data_workers=_configured(args.data_workers, ScaleBalancedGraspConfig, "data_workers"),
+            postprocess_workers=_configured(args.postprocess_workers, ScaleBalancedGraspConfig, "postprocess_workers"),
             index_shard_count=args.index_shard_count,
             index_shard_id=args.index_shard_id,
-            **common,
+            **common_for(ScaleBalancedGraspConfig),
         )
         return ScaleBalancedGraspWrapper(config, **wrapper_kwargs)
 
     config = EconomicGraspConfig(
-        batch_size=args.batch_size if args.batch_size is not None else 4,
-        data_workers=args.data_workers if args.data_workers is not None else _default_workers(),
-        **common,
+        batch_size=_configured(args.batch_size, EconomicGraspConfig, "batch_size"),
+        data_workers=_configured(args.data_workers, EconomicGraspConfig, "data_workers"),
+        postprocess_workers=_configured(args.postprocess_workers, EconomicGraspConfig, "postprocess_workers"),
+        **common_for(EconomicGraspConfig),
     )
     return EconomicGraspWrapper(config, **wrapper_kwargs)
 
@@ -296,6 +314,7 @@ def main() -> int:
 
     started_at = timestamp()
     started_perf = time.perf_counter()
+    config = wrapper.config
     setup = {
         "stage": "detector_dump_setup",
         "detector": args.detector,
@@ -306,9 +325,12 @@ def main() -> int:
         "repo_root": str(repo_root.resolve()),
         "dump_root": str(dump_root.resolve()),
         "cuda_device": args.cuda_device,
-        "batch_size": args.batch_size,
-        "data_workers": args.data_workers,
-        "postprocess_workers": args.postprocess_workers,
+        "batch_size": config.batch_size,
+        "data_workers": getattr(config, "data_workers", getattr(config, "num_workers", None)),
+        "postprocess_workers": getattr(config, "postprocess_workers", 0),
+        "prefetch_factor": config.prefetch_factor,
+        "pin_memory": config.pin_memory,
+        "skip_existing": config.skip_existing,
         "max_batches": args.max_batches,
         "index_shard_count": args.index_shard_count,
         "index_shard_id": args.index_shard_id,

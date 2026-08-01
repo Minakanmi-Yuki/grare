@@ -285,45 +285,29 @@ upstream detectors use nondeterministic CUDA kernels, so repeated runs
 otherwise vary the confidence column by roughly `1e-4` without changing grasp
 poses. Use `--dry-run` to preview the upstream command.
 
-This stage runs the detector over every frame of every scene, so its defaults,
-inherited from each upstream project, leave a modern GPU idle. Raise them to
-match the host:
+The recommended dump settings are stored in the detector configs, so the
+optimized command needs no tuning flags. They use batch size 24, eight data
+workers, 32 post-process workers, prefetch factor 4, pinned memory, and resume
+from existing files:
 
-| Flag | Default | Effect |
-| --- | --- | --- |
-| `--batch-size` | 1 for GN and SBG, 4 for EG | frames per forward pass; raise until VRAM is the limit |
-| `--data-workers` | 6 for GN, 4 for SBG and EG | DataLoader processes reading RGB-D frames |
-| `--postprocess-workers` | 0, meaning serial | CPU threads for collision filtering and saving; GN and SBG only |
-| `--prefetch-factor` | 4 | batches each worker preloads |
-| `--collision-thresh` | 0.01 for GN and SBG, 0 for EG | collision filtering; the dominant CPU cost |
-
-The worker defaults are capped by the cores the process may actually use, so a
-container CPU quota is respected rather than the host's core count.
-
-Collision filtering runs on CPU for every frame and re-reads the point cloud, so
-it is why GN and SBG are much slower than EG, which ships with it disabled.
-`--collision-thresh 0` turns it off, but the detector then emits its unfiltered
-candidate set — roughly eight times more grasps for GN — so the resulting AP is
-not comparable to the values in [Reported Results](#reported-results). Leave the
-defaults alone when reproducing the paper.
+For the small container CPU quota, also limit NumPy/BLAS thread pools once per
+shell (these variables are not detector-config parameters):
 
 ```bash
-grare-dump --detector graspnet_baseline --camera realsense --split train \
-  --batch-size 8 --data-workers 12 --postprocess-workers 8
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
 ```
-
-`--postprocess-workers` is often the largest single win, because collision
-filtering runs on CPU and is serial by default. Verify a new combination on a
-few batches before committing to a whole split:
 
 ```bash
-grare-dump --detector graspnet_baseline --camera realsense --split test \
-  --batch-size 8 --data-workers 12 --postprocess-workers 8 --max-batches 4
+grare-dump --detector graspnet_baseline --camera realsense --split test
 ```
 
-Keep `--data-workers` low when the dataset sits on a mechanical disk: parallel
-readers turn sequential reads into seeks and can end up slower than fewer
-workers.
+For SBG and EG, replace the detector name. GN, SBG, and EG now all use the
+configured post-processing worker pool. GN and SBG should report
+`"shared_collision_cloud": true` in their startup JSON after
+`scripts/build_detector_extensions.sh` has been run.
 
 GN and SBG can also be split across GPUs with `--index-shard-count` and
 `--index-shard-id`; EG does not support sharding and rejects those flags:

@@ -83,6 +83,21 @@ def test_split_and_camera_reach_the_adapter(
     assert str(tmp_path / name / "train") in command
 
 
+def test_dump_configs_carry_the_recommended_throughput_defaults() -> None:
+    for config_cls, worker_field in (
+        (GraspNetBaselineConfig, "num_workers"),
+        (ScaleBalancedGraspConfig, "data_workers"),
+        (EconomicGraspConfig, "data_workers"),
+    ):
+        config = config_cls(dataset_root="/data", checkpoint_path="/ckpt")
+        assert config.batch_size == 24
+        assert getattr(config, worker_field) == 8
+        assert config.prefetch_factor == 4
+        assert config.pin_memory is True
+        assert config.skip_existing is True
+        assert config.postprocess_workers == 32
+
+
 def test_adapters_resolve_project_root_to_repository_root() -> None:
     """The adapters live one level below scripts/, so parents[2] is the root."""
     for _, _, _, adapter in _CASES:

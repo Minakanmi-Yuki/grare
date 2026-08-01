@@ -12,18 +12,18 @@ class ScaleBalancedGraspConfig:
     checkpoint_path: str
     camera: str = "realsense"
     split: str = "test"
-    batch_size: int = 1
-    data_workers: int = 4
+    batch_size: int = 24
+    data_workers: int = 8
     prefetch_factor: int = 4
-    pin_memory: bool = False
+    pin_memory: bool = True
     persistent_workers: bool = True
     num_point: int = 20000
     num_view: int = 300
     collision_thresh: float = 0.01
     voxel_size: float = 0.01
-    skip_existing: bool = False
+    skip_existing: bool = True
     max_batches: int | None = None
-    postprocess_workers: int = 0
+    postprocess_workers: int = 32
     index_shard_count: int = 1
     index_shard_id: int = 0
     tf32: bool = True
@@ -91,10 +91,14 @@ class ScaleBalancedGraspWrapper(BaseDetectorWrapper):
             command.append("--deterministic")
         if self.config.pin_memory:
             command.append("--pin-memory")
+        else:
+            command.append("--no-pin-memory")
         if not self.config.persistent_workers:
             command.append("--no-persistent-workers")
         if self.config.skip_existing:
             command.append("--skip-existing")
+        else:
+            command.append("--no-skip-existing")
         if self.config.max_batches is not None:
             command += ["--max_batches", str(self.config.max_batches)]
         if self.config.tf32:

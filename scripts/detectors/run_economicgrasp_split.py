@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 import json
 import os
 from pathlib import Path
@@ -64,15 +65,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--m_point", type=int, default=1024)
     parser.add_argument("--grasp_max_width", type=float, default=0.1)
     parser.add_argument("--graspness_threshold", type=float, default=0.1)
-    parser.add_argument("--batch_size", type=int, default=4)
-    parser.add_argument("--data_workers", type=int, default=4)
+    parser.add_argument("--batch_size", type=int, default=24)
+    parser.add_argument("--data_workers", type=int, default=8)
     parser.add_argument("--prefetch-factor", type=int, default=4)
-    parser.add_argument("--pin-memory", action="store_true")
+    parser.add_argument("--postprocess-workers", type=int, default=32)
+    parser.add_argument("--pin-memory", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--no-persistent-workers", action="store_true")
     parser.add_argument("--collision_thresh", type=float, default=0.0)
     parser.add_argument("--voxel_size", type=float, default=0.005)
     parser.add_argument("--max_batches", type=int, default=None)
-    parser.add_argument("--skip-existing", action="store_true")
+    parser.add_argument("--skip-existing", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--deterministic", action="store_true")
     parser.add_argument("--tf32", action="store_true")
@@ -211,6 +213,27 @@ def _summarize_latency(values_ms: list[float]) -> dict:
         "max_ms": round(float(np.max(arr)), 4),
         "std_ms": round(float(np.std(arr)), 4),
     }
+
+
+def _complete_postprocess(
+    futures: set,
+    *,
+    block: bool,
+    progress,
+    saved_scenes: set[str],
+) -> int:
+    if not futures:
+        return 0
+    done = {future for future in futures if future.done()}
+    if block and not done:
+        done, _ = wait(futures, return_when=FIRST_COMPLETED)
+    completed = 0
+    for future in done:
+        futures.remove(future)
+        saved_scenes.add(future.result())
+        progress.update(1)
+        completed += 1
+    return completed
 
 
 def main() -> int:
@@ -376,96 +399,154 @@ def main() -> int:
     progress.set_postfix(saved=saved_files, skipped=skipped_existing_files, scenes=len(saved_scenes), refresh=False)
 
     pending_cursor = 0
+    postprocess_pool = (
+        ThreadPoolExecutor(max_workers=args.postprocess_workers)
+        if args.postprocess_workers > 0
+        else None
+    )
+    postprocess_futures: set = set()
+    max_pending_postprocess = max(args.batch_size, args.postprocess_workers * 4)
     latency_batch_ms: list[float] = []
     latency_frame_ms: list[float] = []
-    for batch_idx, batch_data in enumerate(dataloader):
-        if args.max_batches is not None and batch_idx >= args.max_batches:
-            break
 
-        point_clouds = batch_data["point_clouds"]
-        actual_batch_size = int(point_clouds.shape[0])
-        batch_indices = pending_indices[pending_cursor : pending_cursor + actual_batch_size]
-        pending_cursor += actual_batch_size
-        batch_targets = []
-        existing_offsets: set[int] = set()
-        for offset, data_idx in enumerate(batch_indices):
-            scene_name, save_dir, save_path = target_for_index(data_idx)
-            batch_targets.append((data_idx, scene_name, save_dir, save_path))
-            if args.skip_existing and save_path.exists():
-                existing_offsets.add(offset)
-                skipped_existing_files += 1
-                saved_scenes.add(scene_name)
-
-        if len(existing_offsets) == actual_batch_size:
-            progress.update(actual_batch_size)
-            progress.set_postfix(saved=saved_files, skipped=skipped_existing_files, scenes=len(saved_scenes), refresh=False)
-            continue
-
-        _move_batch_to_device(batch_data, device)
-        if args.profile_latency:
-            _sync_if_cuda(device)
-            latency_t0 = time.perf_counter()
-        with torch.inference_mode():
-            end_points = net(batch_data)
-            grasp_preds = pred_decode(end_points)
-        if args.profile_latency:
-            _sync_if_cuda(device)
-            elapsed_ms = (time.perf_counter() - latency_t0) * 1000.0
-            if batch_idx >= args.latency_warmup_batches:
-                latency_batch_ms.append(elapsed_ms)
-                latency_frame_ms.append(elapsed_ms / max(actual_batch_size, 1))
-
-        if args.latency_only:
-            progress.update(actual_batch_size)
-            progress.set_postfix(saved=saved_files, skipped=skipped_existing_files, scenes=len(saved_scenes), refresh=False)
-            continue
-
-        for offset, preds_tensor in enumerate(grasp_preds):
-            if offset in existing_offsets or offset >= len(batch_targets):
-                progress.update(1)
-                continue
-            data_idx, scene_name, save_dir, save_path = batch_targets[offset]
-            grasp_group = GraspGroup(preds_tensor.detach().cpu().numpy())
-
-            if args.collision_thresh > 0:
-                cloud, _ = dataset.get_data(data_idx, return_raw_cloud=True)
-                detector = ModelFreeCollisionDetector(cloud, voxel_size=args.voxel_size)
-                collision_mask = detector.detect(
-                    grasp_group,
-                    approach_dist=0.05,
-                    collision_thresh=args.collision_thresh,
-                )
-                grasp_group = grasp_group[~collision_mask]
-
-            save_dir.mkdir(parents=True, exist_ok=True)
-            grasp_group.save_npy(str(save_path))
-            saved_files += 1
-            saved_scenes.add(scene_name)
-            progress.update(1)
-
-        progress.set_postfix(saved=saved_files, skipped=skipped_existing_files, scenes=len(saved_scenes), refresh=False)
-
-        if batch_idx % batch_interval == 0:
-            elapsed = max(time.time() - tic, 1e-6)
-            print(
-                json.dumps(
-                    {
-                        "stage": "baseline_dump_progress",
-                        "detector": "economicgrasp",
-                        "split": args.split,
-                        "batch_idx": batch_idx,
-                        "num_batches": len(dataloader),
-                        "saved_files": saved_files,
-                        "skipped_existing_files": skipped_existing_files,
-                        "completed_files": saved_files + skipped_existing_files,
-                        "saved_scenes": len(saved_scenes),
-                        "sec_per_batch_window": elapsed / max(batch_interval, 1),
-                    },
-                    ensure_ascii=False,
-                ),
-                flush=True,
+    def save_prediction(
+        data_idx: int,
+        scene_name: str,
+        save_dir: Path,
+        save_path: Path,
+        preds: np.ndarray,
+    ) -> str:
+        grasp_group = GraspGroup(preds)
+        if args.collision_thresh > 0:
+            cloud, _ = dataset.get_data(data_idx, return_raw_cloud=True)
+            detector = ModelFreeCollisionDetector(cloud, voxel_size=args.voxel_size)
+            collision_mask = detector.detect(
+                grasp_group,
+                approach_dist=0.05,
+                collision_thresh=args.collision_thresh,
             )
-            tic = time.time()
+            grasp_group = grasp_group[~collision_mask]
+        save_dir.mkdir(parents=True, exist_ok=True)
+        grasp_group.save_npy(str(save_path))
+        return scene_name
+
+    try:
+        for batch_idx, batch_data in enumerate(dataloader):
+            if args.max_batches is not None and batch_idx >= args.max_batches:
+                break
+
+            saved_files += _complete_postprocess(
+                postprocess_futures,
+                block=False,
+                progress=progress,
+                saved_scenes=saved_scenes,
+            )
+            progress.set_postfix(saved=saved_files, skipped=skipped_existing_files, scenes=len(saved_scenes), refresh=False)
+
+            point_clouds = batch_data["point_clouds"]
+            actual_batch_size = int(point_clouds.shape[0])
+            batch_indices = pending_indices[pending_cursor : pending_cursor + actual_batch_size]
+            pending_cursor += actual_batch_size
+            batch_targets = []
+            existing_offsets: set[int] = set()
+            for offset, data_idx in enumerate(batch_indices):
+                scene_name, save_dir, save_path = target_for_index(data_idx)
+                batch_targets.append((data_idx, scene_name, save_dir, save_path))
+                if args.skip_existing and save_path.exists():
+                    existing_offsets.add(offset)
+                    skipped_existing_files += 1
+                    saved_scenes.add(scene_name)
+
+            if len(existing_offsets) == actual_batch_size:
+                progress.update(actual_batch_size)
+                continue
+
+            _move_batch_to_device(batch_data, device)
+            if args.profile_latency:
+                _sync_if_cuda(device)
+                latency_t0 = time.perf_counter()
+            with torch.inference_mode():
+                end_points = net(batch_data)
+                grasp_preds = pred_decode(end_points)
+            if args.profile_latency:
+                _sync_if_cuda(device)
+                elapsed_ms = (time.perf_counter() - latency_t0) * 1000.0
+                if batch_idx >= args.latency_warmup_batches:
+                    latency_batch_ms.append(elapsed_ms)
+                    latency_frame_ms.append(elapsed_ms / max(actual_batch_size, 1))
+
+            if args.latency_only:
+                progress.update(actual_batch_size)
+                continue
+
+            for offset, preds_tensor in enumerate(grasp_preds):
+                if offset in existing_offsets or offset >= len(batch_targets):
+                    progress.update(1)
+                    continue
+                data_idx, scene_name, save_dir, save_path = batch_targets[offset]
+                preds = preds_tensor.detach().cpu().numpy()
+                if postprocess_pool is None:
+                    saved_scenes.add(save_prediction(data_idx, scene_name, save_dir, save_path, preds))
+                    saved_files += 1
+                    progress.update(1)
+                else:
+                    postprocess_futures.add(
+                        postprocess_pool.submit(
+                            save_prediction,
+                            data_idx,
+                            scene_name,
+                            save_dir,
+                            save_path,
+                            preds,
+                        )
+                    )
+                    while len(postprocess_futures) >= max_pending_postprocess:
+                        saved_files += _complete_postprocess(
+                            postprocess_futures,
+                            block=True,
+                            progress=progress,
+                            saved_scenes=saved_scenes,
+                        )
+
+            saved_files += _complete_postprocess(
+                postprocess_futures,
+                block=False,
+                progress=progress,
+                saved_scenes=saved_scenes,
+            )
+            progress.set_postfix(saved=saved_files, skipped=skipped_existing_files, scenes=len(saved_scenes), refresh=False)
+
+            if batch_idx % batch_interval == 0:
+                elapsed = max(time.time() - tic, 1e-6)
+                print(
+                    json.dumps(
+                        {
+                            "stage": "baseline_dump_progress",
+                            "detector": "economicgrasp",
+                            "split": args.split,
+                            "batch_idx": batch_idx,
+                            "num_batches": len(dataloader),
+                            "saved_files": saved_files,
+                            "skipped_existing_files": skipped_existing_files,
+                            "completed_files": saved_files + skipped_existing_files,
+                            "saved_scenes": len(saved_scenes),
+                            "sec_per_batch_window": elapsed / max(batch_interval, 1),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    flush=True,
+                )
+                tic = time.time()
+    finally:
+        while postprocess_futures:
+            saved_files += _complete_postprocess(
+                postprocess_futures,
+                block=True,
+                progress=progress,
+                saved_scenes=saved_scenes,
+            )
+        if postprocess_pool is not None:
+            postprocess_pool.shutdown(wait=True)
 
     progress.close()
     payload = {
