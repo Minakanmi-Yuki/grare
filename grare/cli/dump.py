@@ -43,6 +43,7 @@ from grare.detectors.scale_balanced_grasp_wrapper import (
     ScaleBalancedGraspConfig,
     ScaleBalancedGraspWrapper,
 )
+from grare.utils.cpu import cgroup_cpu_quota, effective_cpu_count
 from grare.utils.experiment_logging import timestamp, write_json
 
 
@@ -65,6 +66,16 @@ DEFAULT_CKPT_BY_CAMERA = {
         "economicgrasp": "economicgrasp/economicgrasp_kinect.tar",
     },
 }
+
+
+
+def _default_workers() -> int:
+    """DataLoader processes to use when the caller does not say.
+
+    Capped by the usable cores rather than the host's, so a small container
+    quota does not spawn dozens of readers that only fight the scheduler.
+    """
+    return max(1, min(6, effective_cpu_count()))
 
 
 def _default_dump_root() -> Path:
@@ -125,6 +136,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-batches", type=int, default=None, help="Stop after N batches. Intended for smoke tests.")
     parser.add_argument("--index-shard-count", type=int, default=1, help="Split dump indices into N shards.")
     parser.add_argument("--index-shard-id", type=int, default=0, help="Run only this zero-based shard.")
+    parser.add_argument(
+        "--collision-thresh",
+        type=float,
+        default=None,
+        help="Collision-filter threshold. Defaults to the value each detector's dumps were "
+             "generated with: 0.01 for GraspNet-Baseline and Scale-Balanced-Grasp, 0 (disabled) "
+             "for EconomicGrasp. Filtering is the dominant CPU cost of this stage, but changing "
+             "it changes the candidate set, so AP is no longer comparable to the reported values.",
+    )
+    parser.add_argument(
+        "--voxel-size",
+        type=float,
+        default=None,
+        help="Voxel size for collision filtering. Defaults to each detector's published value "
+             "(0.01 for GN and SBG, 0.005 for EG).",
+    )
     parser.add_argument("--seed", type=int, default=0, help="Random seed used by detector inference.")
     parser.add_argument(
         "--deterministic",
@@ -174,7 +201,13 @@ def _build_wrapper(args: argparse.Namespace, dataset_root: Path, ckpt: Path, rep
         )
 
     persistent_workers = not args.no_persistent_workers
+    overrides: dict[str, float] = {}
+    if args.collision_thresh is not None:
+        overrides["collision_thresh"] = float(args.collision_thresh)
+    if args.voxel_size is not None:
+        overrides["voxel_size"] = float(args.voxel_size)
     common = {
+        **overrides,
         "dataset_root": str(dataset_root),
         "checkpoint_path": str(ckpt),
         "camera": args.camera,
@@ -196,7 +229,7 @@ def _build_wrapper(args: argparse.Namespace, dataset_root: Path, ckpt: Path, rep
     if args.detector == "graspnet_baseline":
         config = GraspNetBaselineConfig(
             batch_size=args.batch_size if args.batch_size is not None else 1,
-            num_workers=args.data_workers if args.data_workers is not None else 6,
+            num_workers=args.data_workers if args.data_workers is not None else _default_workers(),
             postprocess_workers=args.postprocess_workers,
             index_shard_count=args.index_shard_count,
             index_shard_id=args.index_shard_id,
@@ -207,7 +240,7 @@ def _build_wrapper(args: argparse.Namespace, dataset_root: Path, ckpt: Path, rep
     if args.detector == "scale_balanced_grasp":
         config = ScaleBalancedGraspConfig(
             batch_size=args.batch_size if args.batch_size is not None else 1,
-            data_workers=args.data_workers if args.data_workers is not None else 4,
+            data_workers=args.data_workers if args.data_workers is not None else _default_workers(),
             postprocess_workers=args.postprocess_workers,
             index_shard_count=args.index_shard_count,
             index_shard_id=args.index_shard_id,
@@ -217,7 +250,7 @@ def _build_wrapper(args: argparse.Namespace, dataset_root: Path, ckpt: Path, rep
 
     config = EconomicGraspConfig(
         batch_size=args.batch_size if args.batch_size is not None else 4,
-        data_workers=args.data_workers if args.data_workers is not None else 4,
+        data_workers=args.data_workers if args.data_workers is not None else _default_workers(),
         **common,
     )
     return EconomicGraspWrapper(config, **wrapper_kwargs)

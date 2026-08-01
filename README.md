@@ -295,6 +295,17 @@ match the host:
 | `--data-workers` | 6 for GN, 4 for SBG and EG | DataLoader processes reading RGB-D frames |
 | `--postprocess-workers` | 0, meaning serial | CPU threads for collision filtering and saving; GN and SBG only |
 | `--prefetch-factor` | 4 | batches each worker preloads |
+| `--collision-thresh` | 0.01 for GN and SBG, 0 for EG | collision filtering; the dominant CPU cost |
+
+The worker defaults are capped by the cores the process may actually use, so a
+container CPU quota is respected rather than the host's core count.
+
+Collision filtering runs on CPU for every frame and re-reads the point cloud, so
+it is why GN and SBG are much slower than EG, which ships with it disabled.
+`--collision-thresh 0` turns it off, but the detector then emits its unfiltered
+candidate set — roughly eight times more grasps for GN — so the resulting AP is
+not comparable to the values in [Reported Results](#reported-results). Leave the
+defaults alone when reproducing the paper.
 
 ```bash
 grare-dump --detector graspnet_baseline --camera realsense --split train \

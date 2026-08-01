@@ -39,6 +39,7 @@ from grare.evaluation.checkpointed import (
     valid_npy,
 )
 from grare.evaluation.graspnet_eval_adapter import GraspNetEvalAdapter
+from grare.utils.cpu import effective_cpu_count
 from grare.utils.experiment_logging import timestamp
 
 
@@ -56,8 +57,8 @@ def parse_args() -> argparse.Namespace:
         "--proc",
         type=int,
         default=_default_proc(),
-        help="Number of scenes evaluated concurrently. Defaults to "
-             "min(40, max(1, os.cpu_count()//2)).",
+        help="Number of scenes evaluated concurrently. Defaults to half the usable "
+             "cores, respecting any container CPU quota.",
     )
     p.add_argument("--save-raw", required=True, help="Path to output .npy for the per-scene tensor")
     p.add_argument("--save-summary", required=True, help="Path to output summary json")
@@ -95,8 +96,9 @@ def parse_args() -> argparse.Namespace:
 
 
 def _default_proc() -> int:
-    cpu = os.cpu_count() or 1
-    return min(40, max(1, cpu // 2))
+    # effective_cpu_count() honours a container CPU quota, which os.cpu_count()
+    # ignores; on a limited cgroup the host count oversubscribes badly.
+    return min(40, max(1, effective_cpu_count() // 2))
 
 
 def _metric_triplet(values: np.ndarray) -> dict[str, float | None]:
