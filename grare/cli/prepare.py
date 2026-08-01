@@ -107,8 +107,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--object-fps-workers",
         type=int,
-        default=int(os.environ.get("GRARE_OBJECT_FPS_WORKERS", "8")),
+        default=int(os.environ.get("GRARE_OBJECT_FPS_WORKERS", "4")),
         help="CPU threads for independent per-mask FPS calls in the one-GPU object stage.",
+    )
+    parser.add_argument(
+        "--object-fps-input-max-points",
+        type=int,
+        default=int(os.environ.get("GRARE_OBJECT_FPS_INPUT_MAX_POINTS", "0")),
+        help=(
+            "Maximum masked depth points considered by FPS per SAM mask; "
+            "0 keeps exact FPS over every point."
+        ),
     )
     parser.add_argument("--save-path", default=None)
     parser.add_argument("--save-records-path", default=None)
@@ -177,6 +186,7 @@ def main() -> int:
         cluster_radius_m=float(args.sam_cluster_radius_m),
         prompt_batch_size=int(args.sam_prompt_batch_size),
         fps_workers=max(1, int(args.object_fps_workers)),
+        fps_input_max_points=max(0, int(args.object_fps_input_max_points)),
     )
     effective_num_workers = _effective_prepare_workers(
         args.num_workers,

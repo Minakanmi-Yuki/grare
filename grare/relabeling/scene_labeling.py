@@ -101,6 +101,10 @@ class SamObjectCloudConfig:
     cluster_radius_m: float = 0.03
     prompt_batch_size: int = 64
     fps_workers: int = 8
+    # Set a positive value to bound CPU-only FPS with a deterministic
+    # image-order stratified subset. CUDA FPS is fast enough to remain exact
+    # by default (0 = every masked depth point).
+    fps_input_max_points: int = 0
 
 
 @dataclass(frozen=True)
@@ -1003,6 +1007,8 @@ class _BaseLabelBackend:
         for candidates whose SAM call yields no valid mask.
         """
         cfg = self.config
+        profile_object = os.environ.get("GRARE_OBJECT_PROFILE", "").strip().lower() in {"1", "true", "yes"}
+        profile_started = time.perf_counter() if profile_object else 0.0
         num_grasps = len(grasp_group_array)
         P = int(cfg.object_cloud_points)
         out = np.zeros((num_grasps, P, 3), dtype=np.float32)
@@ -1039,6 +1045,7 @@ class _BaseLabelBackend:
             )
         predictor = self._sam_predictor
         predictor.set_image(rgb_image)
+        encoded_at = time.perf_counter() if profile_object else 0.0
 
         translations = grasp_group_array[:, 13:16].astype(np.float32, copy=False)
         # Greedy 3D clustering to share masks across nearby candidates.
@@ -1069,7 +1076,9 @@ class _BaseLabelBackend:
             prompt_cluster_ids.append(cid)
 
         masks = predictor.predict_many_at_pixels(prompt_pixels)
+        decoded_at = time.perf_counter() if profile_object else 0.0
         fps_jobs: list[tuple[int, np.ndarray]] = []
+        raw_fps_input_points = 0
         for cid, mask in zip(prompt_cluster_ids, masks):
             if mask is None:
                 continue
@@ -1077,9 +1086,19 @@ class _BaseLabelBackend:
             if len(obj_pts) == 0:
                 continue
             if len(obj_pts) > P:
-                fps_jobs.append((cid, obj_pts))
+                raw_fps_input_points += len(obj_pts)
+                fps_jobs.append(
+                    (
+                        cid,
+                        _fps_input_subset(
+                            obj_pts,
+                            max_points=cfg.sam.fps_input_max_points,
+                        ),
+                    )
+                )
             else:
                 cluster_object_pts[cid] = obj_pts.astype(np.float32, copy=False)
+        projected_at = time.perf_counter() if profile_object else 0.0
 
         # MobileSAM runs in this single GPU process. The independent CPU FPS
         # calls below used to be serial, leaving the host mostly idle while
@@ -1087,15 +1106,28 @@ class _BaseLabelBackend:
         # operations, so a small thread pool improves throughput without
         # replicating the SAM model or changing the selected points.
         if fps_jobs:
-            fps_workers = max(1, int(cfg.sam.fps_workers))
             job_points = [points for _, points in fps_jobs]
-            if fps_workers == 1 or len(job_points) == 1:
-                sampled = [_fps_downsample_points(points, P) for points in job_points]
+            # The mask decoder already runs on CUDA.  Padding the independent
+            # masks into one batch lets the GPU perform the otherwise
+            # million-point FPS work in parallel, rather than sending dozens
+            # of small NumPy loops through a CPU thread pool.
+            use_cuda_fps = str(cfg.sam.device).strip().lower().startswith("cuda")
+            if use_cuda_fps:
+                sampled = _fps_downsample_points_cuda(job_points, P, device=cfg.sam.device)
+                fps_backend = "cuda"
             else:
-                with ThreadPoolExecutor(max_workers=min(fps_workers, len(job_points))) as executor:
-                    sampled = list(executor.map(lambda points: _fps_downsample_points(points, P), job_points))
+                fps_workers = max(1, int(cfg.sam.fps_workers))
+                if fps_workers == 1 or len(job_points) == 1:
+                    sampled = [_fps_downsample_points(points, P) for points in job_points]
+                else:
+                    with ThreadPoolExecutor(max_workers=min(fps_workers, len(job_points))) as executor:
+                        sampled = list(executor.map(lambda points: _fps_downsample_points(points, P), job_points))
+                fps_backend = "cpu"
             for (cid, _), points in zip(fps_jobs, sampled):
                 cluster_object_pts[cid] = points
+        else:
+            fps_backend = "none"
+        sampled_at = time.perf_counter() if profile_object else 0.0
 
         for i in range(num_grasps):
             cid = int(cluster_owner[i])
@@ -1104,6 +1136,31 @@ class _BaseLabelBackend:
                 continue
             m = len(pts)
             out[i, :m] = pts
+        if profile_object:
+            finished_at = time.perf_counter()
+            print(
+                json.dumps(
+                    {
+                        "stage": "object_profile",
+                        "grasps": num_grasps,
+                        "clusters": len(unique_centroids),
+                        "valid_prompts": len(prompt_pixels),
+                        "valid_masks": int(sum(mask is not None for mask in masks)),
+                        "fps_jobs": len(fps_jobs),
+                        "fps_backend": fps_backend,
+                        "fps_input_points": int(sum(len(points) for _, points in fps_jobs)),
+                        "fps_input_points_raw": int(raw_fps_input_points),
+                        "set_image_sec": round(encoded_at - profile_started, 4),
+                        "decode_sec": round(decoded_at - encoded_at, 4),
+                        "backproject_sec": round(projected_at - decoded_at, 4),
+                        "fps_sec": round(sampled_at - projected_at, 4),
+                        "scatter_sec": round(finished_at - sampled_at, 4),
+                        "total_sec": round(finished_at - profile_started, 4),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
         return out
 
     def _get_frame_context(self, scene_id: int, frame_id: int) -> FrameContext:
@@ -1536,6 +1593,69 @@ def _fps_downsample_points(points: np.ndarray, budget: int) -> np.ndarray:
     if len(points) > budget:
         points = points[_fps_indices(points, budget, seed_strategy="farthest")]
     return points.astype(np.float32, copy=False)
+
+
+def _fps_downsample_points_cuda(
+    point_sets: list[np.ndarray], budget: int, *, device: str
+) -> list[np.ndarray]:
+    """Run independent FPS recurrences in one CUDA batch.
+
+    Each SAM mask has a different number of depth points.  We pad to the
+    largest mask, retain a validity mask, and keep padded entries at ``-inf``
+    in the running-distance tensor.  This is equivalent to calling
+    :func:`_fps_downsample_points` per mask, modulo normal floating-point
+    tie-breaking, but replaces hundreds of CPU vector loops with one GPU
+    vector loop per FPS iteration.
+    """
+    import torch
+
+    if not point_sets:
+        return []
+    sizes = np.asarray([len(points) for points in point_sets], dtype=np.int64)
+    max_points = int(sizes.max())
+    padded = np.zeros((len(point_sets), max_points, 3), dtype=np.float32)
+    for row, points in enumerate(point_sets):
+        padded[row, : len(points)] = points
+
+    with torch.inference_mode():
+        cloud = torch.from_numpy(padded).to(device)
+        lengths = torch.as_tensor(sizes, device=cloud.device)
+        valid = torch.arange(max_points, device=cloud.device).unsqueeze(0) < lengths.unsqueeze(1)
+        rows = torch.arange(len(point_sets), device=cloud.device)
+        selected = torch.empty((len(point_sets), budget), dtype=torch.long, device=cloud.device)
+
+        radii = torch.linalg.vector_norm(cloud, dim=2)
+        radii.masked_fill_(~valid, float("-inf"))
+        seed = torch.argmax(radii, dim=1)
+        selected[:, 0] = seed
+        last = cloud[rows, seed]
+        distances = torch.full((len(point_sets), max_points), float("inf"), device=cloud.device)
+        distances.masked_fill_(~valid, float("-inf"))
+        for slot in range(1, budget):
+            diff = cloud - last.unsqueeze(1)
+            d_new = (diff * diff).sum(dim=2)
+            torch.minimum(distances, d_new, out=distances)
+            idx = torch.argmax(distances, dim=1)
+            selected[:, slot] = idx
+            last = cloud[rows, idx]
+        sampled = cloud[rows[:, None], selected].cpu().numpy()
+    return [sampled[row] for row in range(len(point_sets))]
+
+
+def _fps_input_subset(points: np.ndarray, *, max_points: int) -> np.ndarray:
+    """Bound FPS cost with a deterministic, image-order stratified subset.
+
+    ``back_project_mask_to_points`` yields masked depth pixels in row-major
+    image order. Evenly spacing indices across that sequence therefore keeps
+    coverage over both image axes, unlike truncating a mask's first rows. The
+    subsequent farthest-point sampling remains unchanged and deterministic.
+    A non-positive limit opts out for exact legacy behaviour.
+    """
+    limit = int(max_points)
+    if limit <= 0 or len(points) <= limit:
+        return points
+    index = np.linspace(0, len(points) - 1, num=limit, dtype=np.int64)
+    return points[index]
 
 
 def _stratified_fps_select(
