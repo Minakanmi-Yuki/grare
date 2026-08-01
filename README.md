@@ -379,7 +379,9 @@ grare-prepare --stage object --num-workers 1 \
   --object-cloud-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/object_cloud/$SPLIT" \
   --detector "$DETECTOR" --dataset-root "$GRASPNET_ROOT" \
   --camera "$CAMERA" --split "$SPLIT" \
-  --sam-checkpoint "$GRARE_SAM_CKPT" --omit-object-cloud
+  --sam-checkpoint "$GRARE_SAM_CKPT" \
+  --sam-prompt-batch-size 64 --object-fps-workers 8 \
+  --omit-object-cloud --no-manifest
 ```
 
 The process is resumable: rerunning the same commands skips archives already
@@ -409,8 +411,9 @@ single-GPU machine `--num-workers 12` creates twelve model copies and can OOM or
 appear to hang. The prepare command now caps labels workers at both the
 effective CPU quota and a memory-safe default of twenty (override deliberately
 with `GRARE_PREPARE_MAX_LABEL_WORKERS`), and caps CUDA SAM workers at the number
-of visible GPUs. MobileSAM prompt decoding defaults to a batch of 64; lower
-`--sam-prompt-batch-size` if a smaller GPU runs out of VRAM. Switching
+of visible GPUs. MobileSAM prompt decoding defaults to a batch of 64, and the
+single GPU worker uses eight CPU threads for independent mask FPS calls; lower
+`--sam-prompt-batch-size` or `--object-fps-workers` on a smaller host. Switching
 scenes evicts that cache and re-reads the scene's `dex_models` entries and object
 meshes, which are far larger than the frames themselves; frames of the same scene
 are grouped into scene-sized chunks (256 frames for the standard GraspNet layout)
@@ -449,7 +452,7 @@ grare-precompute-object \
   --archive-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/local_cloud/$SPLIT" \
   --object-cloud-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/object_cloud/$SPLIT" \
   --output-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/object_pooled/$SPLIT" \
-  --pmae-ckpt "$GRARE_POINT_MAE_CKPT"
+  --pmae-ckpt "$GRARE_POINT_MAE_CKPT" --batch-size 4096
 ```
 
 The precompute command fuses adjacent archives into GPU batches (default

@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import gc
 import json
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 import multiprocessing as mp
 import os
@@ -99,6 +100,7 @@ class SamObjectCloudConfig:
     iou_score_floor: float = 0.0
     cluster_radius_m: float = 0.03
     prompt_batch_size: int = 64
+    fps_workers: int = 8
 
 
 @dataclass(frozen=True)
@@ -1067,6 +1069,7 @@ class _BaseLabelBackend:
             prompt_cluster_ids.append(cid)
 
         masks = predictor.predict_many_at_pixels(prompt_pixels)
+        fps_jobs: list[tuple[int, np.ndarray]] = []
         for cid, mask in zip(prompt_cluster_ids, masks):
             if mask is None:
                 continue
@@ -1074,9 +1077,25 @@ class _BaseLabelBackend:
             if len(obj_pts) == 0:
                 continue
             if len(obj_pts) > P:
-                kept = _fps_indices(obj_pts, P, seed_strategy="farthest")
-                obj_pts = obj_pts[kept]
-            cluster_object_pts[cid] = obj_pts.astype(np.float32, copy=False)
+                fps_jobs.append((cid, obj_pts))
+            else:
+                cluster_object_pts[cid] = obj_pts.astype(np.float32, copy=False)
+
+        # MobileSAM runs in this single GPU process. The independent CPU FPS
+        # calls below used to be serial, leaving the host mostly idle while
+        # downsampling dozens of masks. NumPy releases the GIL in its vector
+        # operations, so a small thread pool improves throughput without
+        # replicating the SAM model or changing the selected points.
+        if fps_jobs:
+            fps_workers = max(1, int(cfg.sam.fps_workers))
+            job_points = [points for _, points in fps_jobs]
+            if fps_workers == 1 or len(job_points) == 1:
+                sampled = [_fps_downsample_points(points, P) for points in job_points]
+            else:
+                with ThreadPoolExecutor(max_workers=min(fps_workers, len(job_points))) as executor:
+                    sampled = list(executor.map(lambda points: _fps_downsample_points(points, P), job_points))
+            for (cid, _), points in zip(fps_jobs, sampled):
+                cluster_object_pts[cid] = points
 
         for i in range(num_grasps):
             cid = int(cluster_owner[i])
@@ -1510,6 +1529,13 @@ def _fps_indices(points: np.ndarray, budget: int, seed_strategy: str = "farthest
         np.minimum(distances, d_new, out=distances)
         selected[s] = int(np.argmax(distances))
     return selected
+
+
+def _fps_downsample_points(points: np.ndarray, budget: int) -> np.ndarray:
+    """FPS downsample one object mask while preserving the published ordering."""
+    if len(points) > budget:
+        points = points[_fps_indices(points, budget, seed_strategy="farthest")]
+    return points.astype(np.float32, copy=False)
 
 
 def _stratified_fps_select(

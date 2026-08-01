@@ -104,6 +104,12 @@ def parse_args() -> argparse.Namespace:
         default=int(os.environ.get("GRARE_SAM_PROMPT_BATCH_SIZE", "64")),
         help="Number of point prompts decoded per MobileSAM mask-decoder batch.",
     )
+    parser.add_argument(
+        "--object-fps-workers",
+        type=int,
+        default=int(os.environ.get("GRARE_OBJECT_FPS_WORKERS", "8")),
+        help="CPU threads for independent per-mask FPS calls in the one-GPU object stage.",
+    )
     parser.add_argument("--save-path", default=None)
     parser.add_argument("--save-records-path", default=None)
     parser.add_argument("--manifest-path", default=None)
@@ -170,6 +176,7 @@ def main() -> int:
         iou_score_floor=float(args.sam_iou_score_floor),
         cluster_radius_m=float(args.sam_cluster_radius_m),
         prompt_batch_size=int(args.sam_prompt_batch_size),
+        fps_workers=max(1, int(args.object_fps_workers)),
     )
     effective_num_workers = _effective_prepare_workers(
         args.num_workers,
