@@ -29,7 +29,7 @@ class SamPredictorConfig:
     min_area_pixels: int = 200
     max_area_ratio: float = 0.4
     iou_score_floor: float = 0.0
-    prompt_batch_size: int = 32
+    prompt_batch_size: int = 64
 
 
 class SamCandidatePredictor:

@@ -98,7 +98,7 @@ class SamObjectCloudConfig:
     max_area_ratio: float = 0.4
     iou_score_floor: float = 0.0
     cluster_radius_m: float = 0.03
-    prompt_batch_size: int = 32
+    prompt_batch_size: int = 64
 
 
 @dataclass(frozen=True)
@@ -1488,6 +1488,9 @@ def _fps_indices(points: np.ndarray, budget: int, seed_strategy: str = "farthest
         return np.zeros((0,), dtype=np.int64)
     if n <= budget:
         return np.arange(n, dtype=np.int64)
+    # Avoid einsum dispatch in the inner loop. Component-wise float32
+    # arithmetic retains the original recurrence and tie-breaking while
+    # being considerably cheaper for these 3D vectors.
     radii = np.linalg.norm(points, axis=1)
     if seed_strategy == "nearest":
         seed = int(np.argmin(radii))
@@ -1499,7 +1502,11 @@ def _fps_indices(points: np.ndarray, budget: int, seed_strategy: str = "farthest
     for s in range(1, budget):
         last = points[selected[s - 1]]
         diff = points - last
-        d_new = np.einsum("ij,ij->i", diff, diff)
+        d_new = (
+            diff[:, 0] * diff[:, 0]
+            + diff[:, 1] * diff[:, 1]
+            + diff[:, 2] * diff[:, 2]
+        )
         np.minimum(distances, d_new, out=distances)
         selected[s] = int(np.argmax(distances))
     return selected

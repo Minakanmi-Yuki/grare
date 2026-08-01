@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 
 class PointMAEPatchEncoder(nn.Module):
@@ -59,9 +60,24 @@ class PointMAEAttention(nn.Module):
         )
         qkv = qkv.permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]
-        attn = (q @ k.transpose(-2, -1)) * self.scale
-        attn = self.attn_drop(attn.softmax(dim=-1))
-        x = (attn @ v).transpose(1, 2).reshape(bsz, num_tokens, channels)
+        if self.attn_drop.p == 0.0 and self.proj_drop.p == 0.0:
+            # PyTorch's scaled-dot-product attention dispatches to Flash or a
+            # fused CUDA kernel when available, while retaining a math-kernel
+            # fallback on CPU. Point-MAE's frozen blocks use zero dropout, so
+            # this is numerically equivalent to the explicit softmax path.
+            x = F.scaled_dot_product_attention(
+                q,
+                k,
+                v,
+                dropout_p=0.0,
+                is_causal=False,
+                scale=self.scale,
+            )
+            x = x.transpose(1, 2).reshape(bsz, num_tokens, channels)
+        else:
+            attn = (q @ k.transpose(-2, -1)) * self.scale
+            attn = self.attn_drop(attn.softmax(dim=-1))
+            x = (attn @ v).transpose(1, 2).reshape(bsz, num_tokens, channels)
         return self.proj_drop(self.proj(x))
 
 

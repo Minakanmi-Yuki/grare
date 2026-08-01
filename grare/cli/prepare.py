@@ -101,7 +101,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--sam-prompt-batch-size",
         type=int,
-        default=int(os.environ.get("GRARE_SAM_PROMPT_BATCH_SIZE", "32")),
+        default=int(os.environ.get("GRARE_SAM_PROMPT_BATCH_SIZE", "64")),
         help="Number of point prompts decoded per MobileSAM mask-decoder batch.",
     )
     parser.add_argument("--save-path", default=None)

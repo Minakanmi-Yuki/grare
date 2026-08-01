@@ -104,6 +104,65 @@ def main() -> int:
 
     started = time.perf_counter()
     processed = skipped = total_rows = 0
+    pending: list[tuple[Path, Path, dict[str, np.ndarray], np.ndarray, int]] = []
+    pending_rows = 0
+
+    def flush_pending() -> None:
+        """Run one fused Point-MAE batch, then write each archive sidecar.
+
+        Detector archives are usually only a few hundred candidates, so the
+        old loop launched one GPU forward per archive and rarely reached the
+        configured batch size. Accumulating adjacent archives keeps the frozen
+        backbone on large kernels while retaining the same per-archive output
+        layout and resume semantics.
+        """
+        nonlocal pending, pending_rows, processed, total_rows
+        if not pending:
+            return
+
+        valid_items = [
+            item
+            for item in pending
+            if item[4] > 0 and item[3].ndim == 3 and item[3].shape[1] > 0
+        ]
+        pooled_parts: list[np.ndarray] = []
+        if valid_items:
+            merged = np.concatenate([item[3] for item in valid_items], axis=0)
+            with torch.inference_mode():
+                for start_idx in range(0, len(merged), args.batch_size):
+                    chunk = torch.from_numpy(merged[start_idx : start_idx + args.batch_size]).to(
+                        device, non_blocking=device.type == "cuda"
+                    )
+                    pooled_parts.append(enc.forward_pooled(chunk).float().cpu().numpy())
+            pooled_merged = np.concatenate(pooled_parts, axis=0)
+        else:
+            pooled_merged = np.zeros((0, 2 * enc.embed_dim), dtype=np.float32)
+
+        pooled_cursor = 0
+        for archive_path, save_path, payload, object_cloud, n in pending:
+            if n == 0 or object_cloud.ndim != 3 or object_cloud.shape[1] == 0:
+                pooled = np.zeros((n, 2 * enc.embed_dim), dtype=np.float16)
+            else:
+                pooled = pooled_merged[pooled_cursor : pooled_cursor + n].astype(np.float16)
+                pooled_cursor += n
+            sidecar_payload = {
+                "object_pooled": pooled,
+                "source_relative_path": np.array(str(archive_path.relative_to(root)), dtype=object),
+            }
+            if "meta_json" in payload:
+                sidecar_payload["meta_json"] = payload["meta_json"]
+            save_npz_archive(save_path, archive_format=args.archive_format, **sidecar_payload)
+            processed += 1
+            total_rows += n
+            if processed % 200 == 0:
+                rate = total_rows / max(time.perf_counter() - started, 1e-6)
+                print(
+                    f"[precompute] {processed} archives, {total_rows} rows, {rate:.0f} rows/s",
+                    flush=True,
+                )
+        pending = []
+        pending_rows = 0
+
     for ap in archives:
         save_ap = output_root / ap.relative_to(root)
         if save_ap.is_file() and not args.overwrite:
@@ -115,28 +174,12 @@ def main() -> int:
             object_path = object_cloud_root / ap.relative_to(root)
             object_payload = load_npz_payload(object_path)
         oc = np.asarray(object_payload["object_cloud"], dtype=np.float32)
-        n = oc.shape[0]
-        if n == 0 or oc.ndim != 3 or oc.shape[1] == 0:
-            pooled = np.zeros((n, 2 * enc.embed_dim), dtype=np.float16)
-        else:
-            outs = []
-            with torch.no_grad():
-                for s in range(0, n, args.batch_size):
-                    chunk = torch.from_numpy(oc[s : s + args.batch_size]).to(device)
-                    outs.append(enc.forward_pooled(chunk).float().cpu().numpy())
-            pooled = np.concatenate(outs, axis=0).astype(np.float16)
-        sidecar_payload = {
-            "object_pooled": pooled,
-            "source_relative_path": np.array(str(ap.relative_to(root)), dtype=object),
-        }
-        if "meta_json" in payload:
-            sidecar_payload["meta_json"] = payload["meta_json"]
-        save_npz_archive(save_ap, archive_format=args.archive_format, **sidecar_payload)
-        processed += 1
-        total_rows += n
-        if processed % 200 == 0:
-            rate = total_rows / max(time.perf_counter() - started, 1e-6)
-            print(f"[precompute] {processed} archives, {total_rows} rows, {rate:.0f} rows/s", flush=True)
+        n = int(oc.shape[0])
+        pending.append((ap, save_ap, payload, oc, n))
+        pending_rows += n
+        if pending_rows >= args.batch_size:
+            flush_pending()
+    flush_pending()
 
     summary = {
         "stage": "precompute_object_pooled",
