@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import contextlib
 import gc
+import json
 from dataclasses import dataclass, replace
 import multiprocessing as mp
 import os
 from pathlib import Path
+import time
 from typing import Any
 
 import numpy as np
@@ -56,8 +58,12 @@ SCENE_CACHE_SIZE = 1
 RELABEL_MAX_CHUNKS_PER_CHILD = 16
 FEATURE_MAX_CHUNKS_PER_CHILD = 64
 MEMORY_RELEASE_INTERVAL = 8
-RELABEL_CHUNK_SIZE = 16
-FEATURE_CHUNK_SIZE = 16
+_PROGRESS_LOG_INTERVAL_SEC = float(os.environ.get("GRARE_PREPARE_LOG_EVERY_SEC", "30"))
+_PROGRESS_POLL_SEC = 5.0
+# Frames per pool task. Smaller chunks report progress sooner and rebalance
+# better across workers; larger chunks reuse a cached scene for longer.
+RELABEL_CHUNK_SIZE = int(os.environ.get("GRARE_PREPARE_CHUNK_SIZE", "8"))
+FEATURE_CHUNK_SIZE = int(os.environ.get("GRARE_PREPARE_CHUNK_SIZE", "8"))
 
 
 def _require_graspnet_api() -> None:
@@ -561,12 +567,59 @@ class BatchAnalyticRelabeler:
             ) as progress:
                 progress.set_postfix(chunks=f"0/{len(relative_chunks)}", chunk_size=chunk_size)
                 chunk_done = 0
-                for chunk_result in pool.imap_unordered(_process_relabel_chunk, enumerate(relative_chunks, start=1)):
-                    chunk_processed = int(chunk_result["processed"])
-                    processed += chunk_processed
-                    chunk_done += 1
-                    progress.update(chunk_processed)
-                    progress.set_postfix(chunks=f"{chunk_done}/{len(relative_chunks)}", chunk_size=chunk_size)
+                started = time.perf_counter()
+                last_report = started
+                results = pool.imap_unordered(
+                    _process_relabel_chunk, enumerate(relative_chunks, start=1)
+                )
+                # Report on a timer rather than per completed chunk. A chunk is
+                # many frames and one frame can take seconds, so waiting for a
+                # chunk to finish leaves minutes with no output at all. Counting
+                # the archives already on disk shows progress within a chunk.
+                while True:
+                    try:
+                        chunk_result = results.next(timeout=_PROGRESS_POLL_SEC)
+                    except mp.TimeoutError:
+                        chunk_result = None
+                    except StopIteration:
+                        break
+
+                    if chunk_result is not None:
+                        chunk_processed = int(chunk_result["processed"])
+                        processed += chunk_processed
+                        chunk_done += 1
+                        progress.update(chunk_processed)
+                        progress.set_postfix(
+                            chunks=f"{chunk_done}/{len(relative_chunks)}",
+                            chunk_size=chunk_size,
+                        )
+
+                    now = time.perf_counter()
+                    if now - last_report < _PROGRESS_LOG_INTERVAL_SEC:
+                        continue
+                    last_report = now
+                    written = _count_written_outputs(output_root)
+                    done = min(max(written - skipped, 0), total_pending)
+                    elapsed = now - started
+                    rate = done / elapsed if elapsed > 0 else 0.0
+                    remaining = max(total_pending - done, 0)
+                    print(
+                        json.dumps(
+                            {
+                                "stage": f"{worker_mode}_progress",
+                                "archives": done,
+                                "archives_total": total_pending,
+                                "percent": round(100.0 * done / max(total_pending, 1), 2),
+                                "chunks": chunk_done,
+                                "chunks_total": len(relative_chunks),
+                                "archives_per_sec": round(rate, 3),
+                                "elapsed_sec": round(elapsed, 1),
+                                "eta_sec": round(remaining / rate, 1) if rate > 0 else None,
+                            },
+                            ensure_ascii=False,
+                        ),
+                        flush=True,
+                    )
 
         print(f"[{worker_mode}] complete processed={processed} skipped={skipped} total={len(candidate_paths)}", flush=True)
 
@@ -1680,6 +1733,14 @@ def _scene_key(relative_path: Path) -> str:
             return part
     return parts[0] if parts else ""
 
+
+
+def _count_written_outputs(output_root: Path) -> int:
+    """Count archives already on disk, so progress advances within a chunk."""
+    try:
+        return sum(1 for _ in output_root.glob("**/*.npz"))
+    except OSError:
+        return 0
 
 def _chunk_size(worker_mode: str) -> int:
     if worker_mode.startswith("features"):

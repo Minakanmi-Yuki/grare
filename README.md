@@ -393,6 +393,12 @@ It parallelizes with a process pool, so raise `--num-workers` to match the host.
 The stage is resumable: an interrupted run can be repeated with the same command
 and skips the frames it already wrote.
 
+Progress is reported every 30 seconds as a JSON line with the archive count,
+percentage, rate, and ETA, counted from the archives already on disk so it
+advances even mid-batch. Set `GRARE_PREPARE_LOG_EVERY_SEC` to report more often,
+and `GRARE_PREPARE_CHUNK_SIZE` to change how many frames a worker takes per task
+(smaller rebalances better across workers, larger reuses a cached scene longer).
+
 ### Splitting the CPU and GPU work
 
 The command above does three things per frame in one process: the analytic
