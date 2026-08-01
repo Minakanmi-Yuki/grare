@@ -365,7 +365,7 @@ SPLIT=train
 export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 
 # CPU: analytic labels and local geometry
-grare-prepare --stage labels --num-workers 8 \
+grare-prepare --stage labels --num-workers 20 \
   --input-root "$GRARE_DUMP_ROOT/$DETECTOR/$SPLIT" \
   --pattern "scene_*/$CAMERA/*.npy" --input-format detector-dump \
   --output-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/local_cloud/$SPLIT" \
@@ -388,7 +388,7 @@ set `SPLIT=test` for the test split.
 
 This stage runs over every frame of every scene and dominates preparation time.
 For the current container (25 CPU quota but roughly 96 GB cgroup memory), use
-eight labels workers: each worker owns a GraspNet/Dex-Net scene cache, so CPU
+twenty labels workers: each worker owns a GraspNet/Dex-Net scene cache, so CPU
 quota is not a safe memory limit. Keep the NumPy/BLAS pools at one thread per
 process. The stage is resumable: an interrupted run can be repeated with the
 same command and skips the frames it already wrote.
@@ -407,7 +407,7 @@ single-pass command, so pick whichever fits the host.
 Each object-stage worker holds its own MobileSAM model and CUDA context, so on a
 single-GPU machine `--num-workers 12` creates twelve model copies and can OOM or
 appear to hang. The prepare command now caps labels workers at both the
-effective CPU quota and a memory-safe default of eight (override deliberately
+effective CPU quota and a memory-safe default of twenty (override deliberately
 with `GRARE_PREPARE_MAX_LABEL_WORKERS`), and caps CUDA SAM workers at the number
 of visible GPUs. Switching
 scenes evicts that cache and re-reads the scene's `dex_models` entries and object

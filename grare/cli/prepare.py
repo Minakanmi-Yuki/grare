@@ -325,11 +325,11 @@ def _label_worker_cap() -> int:
     CPU quota alone is therefore not a safe upper bound. The cap can be raised
     deliberately for a larger-memory host with GRARE_PREPARE_MAX_LABEL_WORKERS.
     """
-    raw = os.environ.get("GRARE_PREPARE_MAX_LABEL_WORKERS", "8")
+    raw = os.environ.get("GRARE_PREPARE_MAX_LABEL_WORKERS", "20")
     try:
         return max(1, int(raw))
     except ValueError:
-        return 8
+        return 20
 
 
 def _effective_prepare_workers(requested: int, *, stage: str, sam_device: str, sam_enabled: bool) -> int:
