@@ -79,6 +79,23 @@ apply_economicgrasp_patch() {
   (cd "$project_root" && patch -p0 < "$patch_file")
 }
 
+apply_graspnet_baseline_dump_patch() {
+  local patch_file="$project_root/scripts/patches/graspnet_baseline_dump_fastpath.patch"
+  local dataset="$project_root/external/graspnet-baseline/dataset/graspnet_dataset.py"
+  local collision="$project_root/external/graspnet-baseline/utils/collision_detector.py"
+
+  if grep -q 'return_raw_cloud_with_sample' "$dataset" && \
+     grep -q 'downsample=True' "$collision"; then
+    printf '%s\n' 'GraspNet-Baseline dump fast-path patch already applied.'
+    return
+  fi
+  # The upstream checkout uses CRLF line endings.  Normalize the two patched
+  # files so the repository patch remains portable across Linux hosts.
+  sed -i 's/\r$//' "$dataset" "$collision"
+  printf '%s\n' '== Applying GraspNet-Baseline dump fast-path patch =='
+  (cd "$project_root" && patch -p0 < "$patch_file")
+}
+
 require_dir "$project_root/external/graspnet-baseline/pointnet2"
 require_dir "$project_root/external/graspnet-baseline/knn"
 require_dir "$project_root/external/Scale-Balanced-Grasp/pointnet2"
@@ -109,6 +126,7 @@ if [[ -n "${TORCH_CUDA_ARCH_LIST:-}" ]]; then
   printf 'TORCH_CUDA_ARCH_LIST=%s\n' "$TORCH_CUDA_ARCH_LIST"
 fi
 
+apply_graspnet_baseline_dump_patch
 run_setup_install 'GraspNet-Baseline PointNet2' "$project_root/external/graspnet-baseline/pointnet2"
 run_setup_install 'GraspNet-Baseline KNN' "$project_root/external/graspnet-baseline/knn"
 run_setup_install 'Scale-Balanced-Grasp PointNet2' "$project_root/external/Scale-Balanced-Grasp/pointnet2"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import collections.abc
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+import inspect
 import json
 import os
 from pathlib import Path
@@ -70,6 +71,22 @@ from graspnetAPI import GraspGroup  # noqa: E402
 from grare.utils.experiment_logging import timestamp, write_json  # noqa: E402
 
 
+def _voxel_downsample_cloud(scene_points: np.ndarray, voxel_size: float) -> np.ndarray:
+    """Voxelize a collision cloud in the DataLoader worker.
+
+    The old path regenerated the RGB-D cloud in the postprocess thread and
+    then voxelized it there.  Returning this compact cloud with the sampled
+    network input lets the two stages share one frame decode and keeps the
+    postprocess pool focused on collision math and file output.
+    """
+    import open3d as o3d
+
+    scene_cloud = o3d.geometry.PointCloud()
+    scene_cloud.points = o3d.utility.Vector3dVector(scene_points)
+    scene_cloud = scene_cloud.voxel_down_sample(voxel_size)
+    return np.asarray(scene_cloud.points)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset_root", required=True)
@@ -116,10 +133,19 @@ def my_worker_init_fn(worker_id: int) -> None:
 class ResumeSubset(Dataset):
     """Load only selected source indices and seed sampling by source index."""
 
-    def __init__(self, dataset, indices: list[int], seed: int) -> None:
+    def __init__(
+        self,
+        dataset,
+        indices: list[int],
+        seed: int,
+        collision_voxel_size: float | None = None,
+        share_collision_cloud: bool = False,
+    ) -> None:
         self.dataset = dataset
         self.indices = list(indices)
         self.seed = int(seed)
+        self.collision_voxel_size = collision_voxel_size
+        self.share_collision_cloud = bool(share_collision_cloud)
 
     def __len__(self) -> int:
         return len(self.indices)
@@ -132,14 +158,35 @@ class ResumeSubset(Dataset):
         random.seed(sample_seed)
         np.random.seed(sample_seed)
         try:
-            return self.dataset[source_index]
+            if not self.share_collision_cloud:
+                return self.dataset[source_index]
+            sample = self.dataset.get_data(
+                source_index,
+                return_raw_cloud_with_sample=True,
+            )
+            if self.collision_voxel_size is not None:
+                sample["_collision_cloud"] = _voxel_downsample_cloud(
+                    sample["_collision_cloud"],
+                    self.collision_voxel_size,
+                )
+            return sample
         finally:
             random.setstate(random_state)
             np.random.set_state(numpy_state)
 
 
+def _collate_dump_batch(batch):
+    """Collate tensors normally while preserving variable-size clouds as a list."""
+    collision_clouds = [sample.pop("_collision_cloud") for sample in batch]
+    collated = collate_fn(batch)
+    collated["_collision_clouds"] = collision_clouds
+    return collated
+
+
 def _move_batch_to_device(batch_data: dict, device: torch.device) -> None:
     for key in batch_data:
+        if key == "_collision_clouds":
+            continue
         value = batch_data[key]
         if "list" in key:
             for i in range(len(value)):
@@ -261,13 +308,38 @@ def main() -> int:
             else:
                 pending_indices.append(data_idx)
 
-    active_dataset = ResumeSubset(dataset, pending_indices, args.seed)
+    supports_shared_collision_cloud = (
+        "return_raw_cloud_with_sample"
+        in inspect.signature(dataset.get_data).parameters
+    )
+    supports_pre_downsampled_detector = (
+        "downsample" in inspect.signature(ModelFreeCollisionDetector).parameters
+    )
+    share_collision_cloud = (
+        args.collision_thresh > 0
+        and supports_shared_collision_cloud
+        and supports_pre_downsampled_detector
+    )
+    if args.collision_thresh > 0 and not share_collision_cloud:
+        print(
+            "warning: GraspNet-Baseline dump fast-path patch is not applied; "
+            "falling back to a second frame read for collision filtering. "
+            "Run ./scripts/build_detector_extensions.sh to apply it.",
+            flush=True,
+        )
+    active_dataset = ResumeSubset(
+        dataset,
+        pending_indices,
+        args.seed,
+        collision_voxel_size=args.voxel_size if share_collision_cloud else None,
+        share_collision_cloud=share_collision_cloud,
+    )
     loader_kwargs = {
         "batch_size": args.batch_size,
         "shuffle": False,
         "num_workers": args.data_workers,
         "worker_init_fn": my_worker_init_fn,
-        "collate_fn": collate_fn,
+        "collate_fn": _collate_dump_batch if share_collision_cloud else collate_fn,
         "pin_memory": args.pin_memory and torch.cuda.is_available(),
         "persistent_workers": args.data_workers > 0 and not args.no_persistent_workers,
     }
@@ -318,6 +390,7 @@ def main() -> int:
                 "pin_memory": bool(args.pin_memory and torch.cuda.is_available()),
                 "persistent_workers": bool(args.data_workers > 0 and not args.no_persistent_workers),
                 "postprocess_workers": args.postprocess_workers,
+                "shared_collision_cloud": bool(share_collision_cloud),
                 "index_shard_count": args.index_shard_count,
                 "index_shard_id": args.index_shard_id,
                 "collision_thresh": args.collision_thresh,
@@ -389,12 +462,35 @@ def main() -> int:
     latency_batch_ms: list[float] = []
     latency_frame_ms: list[float] = []
 
-    def save_prediction(data_idx: int, scene_name: str, save_dir: Path, save_path: Path, preds: np.ndarray) -> str:
+    def save_prediction(
+        data_idx: int,
+        scene_name: str,
+        save_dir: Path,
+        save_path: Path,
+        preds: np.ndarray,
+        collision_cloud: np.ndarray | None = None,
+    ) -> str:
         grasp_group = GraspGroup(preds)
 
         if args.collision_thresh > 0:
-            cloud, _ = dataset.get_data(data_idx, return_raw_cloud=True)
-            detector = ModelFreeCollisionDetector(cloud, voxel_size=args.voxel_size)
+            if collision_cloud is None:
+                # Backward-compatible fallback for callers that do not use
+                # the shared-cloud DataLoader path.
+                collision_cloud, _ = dataset.get_data(data_idx, return_raw_cloud=True)
+                already_downsampled = False
+            else:
+                already_downsampled = True
+            if supports_pre_downsampled_detector:
+                detector = ModelFreeCollisionDetector(
+                    collision_cloud,
+                    voxel_size=args.voxel_size,
+                    downsample=not already_downsampled,
+                )
+            else:
+                detector = ModelFreeCollisionDetector(
+                    collision_cloud,
+                    voxel_size=args.voxel_size,
+                )
             collision_mask = detector.detect(
                 grasp_group,
                 approach_dist=0.05,
@@ -478,13 +574,35 @@ def main() -> int:
                     continue
                 data_idx, scene_name, save_dir, save_path = batch_targets[offset]
                 preds = preds_tensor.detach().cpu().numpy()
+                collision_cloud = (
+                    batch_data["_collision_clouds"][offset]
+                    if share_collision_cloud
+                    else None
+                )
                 if postprocess_pool is None:
-                    saved_scenes.add(save_prediction(data_idx, scene_name, save_dir, save_path, preds))
+                    saved_scenes.add(
+                        save_prediction(
+                            data_idx,
+                            scene_name,
+                            save_dir,
+                            save_path,
+                            preds,
+                            collision_cloud,
+                        )
+                    )
                     saved_files += 1
                     progress.update(1)
                 else:
                     postprocess_futures.add(
-                        postprocess_pool.submit(save_prediction, data_idx, scene_name, save_dir, save_path, preds)
+                        postprocess_pool.submit(
+                            save_prediction,
+                            data_idx,
+                            scene_name,
+                            save_dir,
+                            save_path,
+                            preds,
+                            collision_cloud,
+                        )
                     )
                     while len(postprocess_futures) >= max_pending_postprocess:
                         saved_files += _complete_postprocess(

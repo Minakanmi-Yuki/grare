@@ -1,0 +1,138 @@
+--- external/graspnet-baseline/dataset/graspnet_dataset.py
++++ external/graspnet-baseline/dataset/graspnet_dataset.py
+@@ -34,6 +34,12 @@
+         self.augment = augment
+         self.load_label = load_label
+         self.collision_labels = {}
++        # Camera poses are scene-level constants.  Loading both .npy files
++        # for every frame turns 25,600 frames into 51,200 redundant file
++        # opens during a train dump, and each DataLoader worker otherwise
++        # repeats that cost independently.
++        self._camera_pose_cache = {}
++        self._camera_info_cache = {}
+ 
+         if split == 'train':
+             self.sceneIds = list( range(100) )
+@@ -73,6 +79,24 @@
+     def __len__(self):
+         return len(self.depthpath)
+ 
++    def _camera_transform(self, scene, frame_index):
++        cached = self._camera_pose_cache.get(scene)
++        if cached is None:
++            camera_poses = np.load(os.path.join(self.root, 'scenes', scene, self.camera, 'camera_poses.npy'))
++            align_mat = np.load(os.path.join(self.root, 'scenes', scene, self.camera, 'cam0_wrt_table.npy'))
++            cached = (camera_poses, align_mat)
++            self._camera_pose_cache[scene] = cached
++        camera_poses, align_mat = cached
++        return np.dot(align_mat, camera_poses[frame_index])
++
++    def _camera_calibration(self, scene, index):
++        cached = self._camera_info_cache.get(scene)
++        if cached is None:
++            meta = scio.loadmat(self.metapath[index])
++            cached = (meta['intrinsic_matrix'], meta['factor_depth'])
++            self._camera_info_cache[scene] = cached
++        return cached
++
+     def augment_data(self, point_clouds, object_poses_list):
+         # Flipping along the YZ plane
+         if np.random.random() > 0.5:
+@@ -101,18 +125,19 @@
+         else:
+             return self.get_data(index)
+ 
+-    def get_data(self, index, return_raw_cloud=False):
++    def get_data(self, index, return_raw_cloud=False, return_raw_cloud_with_sample=False):
++        """Load one frame.
++
++        ``return_raw_cloud_with_sample`` is used by the GraRe dump runner to
++        carry the collision-filtering cloud through the same DataLoader pass
++        as the sampled network input.  The old ``return_raw_cloud`` behavior
++        remains unchanged for upstream callers.
++        """
+         color = np.array(Image.open(self.colorpath[index]), dtype=np.float32) / 255.0
+         depth = np.array(Image.open(self.depthpath[index]))
+         seg = np.array(Image.open(self.labelpath[index]))
+-        meta = scio.loadmat(self.metapath[index])
+         scene = self.scenename[index]
+-        try:
+-            intrinsic = meta['intrinsic_matrix']
+-            factor_depth = meta['factor_depth']
+-        except Exception as e:
+-            print(repr(e))
+-            print(scene)
++        intrinsic, factor_depth = self._camera_calibration(scene, index)
+         camera = CameraInfo(1280.0, 720.0, intrinsic[0][0], intrinsic[1][1], intrinsic[0][2], intrinsic[1][2], factor_depth)
+ 
+         # generate cloud
+@@ -122,9 +147,7 @@
+         depth_mask = (depth > 0)
+         seg_mask = (seg > 0)
+         if self.remove_outlier:
+-            camera_poses = np.load(os.path.join(self.root, 'scenes', scene, self.camera, 'camera_poses.npy'))
+-            align_mat = np.load(os.path.join(self.root, 'scenes', scene, self.camera, 'cam0_wrt_table.npy'))
+-            trans = np.dot(align_mat, camera_poses[self.frameid[index]])
++            trans = self._camera_transform(scene, self.frameid[index])
+             workspace_mask = get_workspace_mask(cloud, seg, trans=trans, organized=True, outlier=0.02)
+             mask = (depth_mask & workspace_mask)
+         else:
+@@ -132,7 +155,7 @@
+         cloud_masked = cloud[mask]
+         color_masked = color[mask]
+         seg_masked = seg[mask]
+-        if return_raw_cloud:
++        if return_raw_cloud and not return_raw_cloud_with_sample:
+             return cloud_masked, color_masked
+ 
+         # sample points
+@@ -148,6 +171,11 @@
+         ret_dict = {}
+         ret_dict['point_clouds'] = cloud_sampled.astype(np.float32)
+         ret_dict['cloud_colors'] = color_sampled.astype(np.float32)
++        if return_raw_cloud_with_sample:
++            # Keep the original cloud values.  The dump runner voxelizes it
++            # once in the worker before collision filtering, avoiding a
++            # second RGB-D/MAT read in the postprocess thread.
++            ret_dict['_collision_cloud'] = cloud_masked
+ 
+         return ret_dict
+ 
+@@ -174,9 +202,7 @@
+         depth_mask = (depth > 0)
+         seg_mask = (seg > 0)
+         if self.remove_outlier:
+-            camera_poses = np.load(os.path.join(self.root, 'scenes', scene, self.camera, 'camera_poses.npy'))
+-            align_mat = np.load(os.path.join(self.root, 'scenes', scene, self.camera, 'cam0_wrt_table.npy'))
+-            trans = np.dot(align_mat, camera_poses[self.frameid[index]])
++            trans = self._camera_transform(scene, self.frameid[index])
+             workspace_mask = get_workspace_mask(cloud, seg, trans=trans, organized=True, outlier=0.02)
+             mask = (depth_mask & workspace_mask)
+         else:
+--- external/graspnet-baseline/utils/collision_detector.py
++++ external/graspnet-baseline/utils/collision_detector.py
+@@ -25,14 +25,20 @@
+             collision_mask, empty_mask, iou_list = mfcdetector.detect(grasp_group, approach_dist=0.03, collision_thresh=0.05,
+                                             return_empty_grasp=True, empty_thresh=0.01, return_ious=True)
+     """
+-    def __init__(self, scene_points, voxel_size=0.005):
++    def __init__(self, scene_points, voxel_size=0.005, downsample=True):
+         self.finger_width = 0.01
+         self.finger_length = 0.06
+         self.voxel_size = voxel_size
+-        scene_cloud = o3d.geometry.PointCloud()
+-        scene_cloud.points = o3d.utility.Vector3dVector(scene_points)
+-        scene_cloud = scene_cloud.voxel_down_sample(voxel_size)
+-        self.scene_points = np.array(scene_cloud.points)
++        if downsample:
++            scene_cloud = o3d.geometry.PointCloud()
++            scene_cloud.points = o3d.utility.Vector3dVector(scene_points)
++            scene_cloud = scene_cloud.voxel_down_sample(voxel_size)
++            self.scene_points = np.array(scene_cloud.points)
++        else:
++            # GraRe's dump DataLoader can perform this voxelization while it
++            # is already loading the frame.  Avoid doing the same work again
++            # in the postprocess thread.
++            self.scene_points = np.asarray(scene_points)
+ 
+     def detect(self, grasp_group, approach_dist=0.03, collision_thresh=0.05, return_empty_grasp=False, empty_thresh=0.01, return_ious=False):
