@@ -393,6 +393,41 @@ It parallelizes with a process pool, so raise `--num-workers` to match the host.
 The stage is resumable: an interrupted run can be repeated with the same command
 and skips the frames it already wrote.
 
+### Splitting the CPU and GPU work
+
+The command above does three things per frame in one process: the analytic
+labels and local geometry on CPU, then the MobileSAM object cloud on GPU. Only
+one of the two is busy at a time, so neither the CPU nor the GPU is well used and
+a single `--num-workers` has to serve both.
+
+`--stage` splits them so each runs at its own concurrency. Use a high worker
+count for the CPU pass and a lower one for the GPU pass, which is bounded by
+VRAM:
+
+```bash
+# CPU: analytic labels and shell-wise local geometry, no SAM
+grare-prepare --stage labels --num-workers 24 \
+  --input-root "$GRARE_DUMP_ROOT/$DETECTOR/$SPLIT" \
+  --pattern "scene_*/$CAMERA/*.npy" --input-format detector-dump \
+  --output-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/local_cloud/$SPLIT" \
+  --detector "$DETECTOR" --dataset-root "$GRASPNET_ROOT" \
+  --camera "$CAMERA" --split "$SPLIT" --omit-object-cloud
+
+# GPU: add the SAM object cloud to those archives
+grare-prepare --stage object --num-workers 12 \
+  --input-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/local_cloud/$SPLIT" \
+  --output-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/local_cloud/$SPLIT" \
+  --object-cloud-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/object_cloud/$SPLIT" \
+  --detector "$DETECTOR" --dataset-root "$GRASPNET_ROOT" \
+  --camera "$CAMERA" --split "$SPLIT" \
+  --sam-checkpoint "$GRARE_SAM_CKPT" --omit-object-cloud
+```
+
+`--stage labels` keeps SAM off even if a checkpoint is passed, so it never
+touches the GPU. `--stage object` reuses the labels already on disk and only adds
+the object cloud. The two stages together produce byte-identical archives to the
+single-pass command, so pick whichever fits the host.
+
 Each worker holds its own MobileSAM model and CUDA context and caches a single
 scene's assets, so more workers cost VRAM and memory as well as CPU. Switching
 scenes evicts that cache and re-reads the scene's `dex_models` entries and object

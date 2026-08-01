@@ -39,6 +39,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--camera", required=True)
     parser.add_argument("--split", default="test")
     parser.add_argument(
+        "--stage",
+        choices=("all", "labels", "object"),
+        default="all",
+        help=(
+            "all: analytic labels, local geometry, and the SAM object cloud in one pass. "
+            "labels: the CPU-bound labels and local geometry only, skipping SAM. "
+            "object: add the GPU-bound SAM object cloud to archives written by --stage labels. "
+            "Splitting the two lets each run at its own --num-workers, since one is CPU-bound "
+            "and the other is GPU-bound."
+        ),
+    )
+    parser.add_argument(
         "--input-format",
         choices=("candidate-archive", "detector-dump", "auto"),
         default="candidate-archive",
@@ -141,8 +153,13 @@ def main() -> int:
     output_pattern = _output_pattern_for_input_pattern(input_pattern)
     shell_edges = tuple(float(s) for s in args.shell_edges.split(","))
     shell_budgets = tuple(int(s) for s in args.shell_budgets.split(","))
+    # --stage labels is the CPU-bound pass: keep SAM off even when a checkpoint is
+    # supplied, so it can run at a high --num-workers without touching the GPU.
+    sam_enabled = bool(args.sam_checkpoint) and args.stage != "labels"
+    if args.stage == "object" and not sam_enabled:
+        raise SystemExit("--stage object requires --sam-checkpoint")
     sam_cfg = SamObjectCloudConfig(
-        enabled=bool(args.sam_checkpoint),
+        enabled=sam_enabled,
         checkpoint=str(args.sam_checkpoint or ""),
         model_type=str(args.sam_model_type),
         device=str(args.sam_device),
@@ -170,7 +187,20 @@ def main() -> int:
             sam=sam_cfg,
         )
     )
-    if input_format == "detector-dump":
+    if args.stage == "object":
+        # GPU stage: add the SAM object cloud to archives that already carry the
+        # analytic labels and local geometry, without redoing the CPU work.
+        summary = relabeler.augment_tree(
+            args.input_root,
+            args.output_root,
+            pattern=input_pattern,
+            limit=args.limit,
+            skip_existing=not args.overwrite,
+            num_workers=args.num_workers,
+            object_cloud_root=args.object_cloud_root,
+            include_object_cloud=not args.omit_object_cloud,
+        )
+    elif input_format == "detector-dump":
         summary = relabeler.relabel_dump_tree(
             args.input_root,
             args.output_root,
