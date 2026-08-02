@@ -370,10 +370,10 @@ def _sam_worker_cap() -> int:
         except ValueError:
             return 1
 
-    # Two MobileSAM contexts used about 11.5 GiB on the 32 GiB RTX 5090 and
-    # sustained a higher throughput by overlapping input/output work with GPU
-    # inference.  Keep the conservative single-context behaviour on smaller
-    # cards; users can always override through the environment variable above.
+    # Four MobileSAM contexts used about 21 GiB on the 32 GiB RTX 5090 and
+    # raised steady object-cloud throughput from about 3 to over 5 archives/s
+    # by overlapping I/O with GPU inference.  Keep conservative limits on
+    # smaller cards; users can always override through the variable above.
     try:
         import torch
 
@@ -382,6 +382,8 @@ def _sam_worker_cap() -> int:
                 int(torch.cuda.get_device_properties(index).total_memory)
                 for index in range(torch.cuda.device_count())
             )
+            if total_vram >= 32 * 1024**3:
+                return 4
             if total_vram >= 24 * 1024**3:
                 return 2
     except Exception:
