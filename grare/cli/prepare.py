@@ -137,8 +137,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--archive-format",
         choices=("compressed", "stored"),
-        default="compressed",
-        help="Output npz storage. 'stored' skips zlib compression for faster training reads.",
+        default=None,
+        help=(
+            "Output npz storage. Defaults to stored for the GPU object stage "
+            "and compressed for other stages."
+        ),
     )
     parser.add_argument(
         "--summary-mode",
@@ -161,7 +164,10 @@ def main() -> int:
         SceneLabelingConfig,
     )
 
-    os.environ["GRARE_ARCHIVE_FORMAT"] = normalize_archive_format(args.archive_format)
+    archive_format = normalize_archive_format(
+        args.archive_format or ("stored" if args.stage == "object" else "compressed")
+    )
+    os.environ["GRARE_ARCHIVE_FORMAT"] = archive_format
     started_at = timestamp()
     started_perf = time.perf_counter()
     input_format = _resolve_input_format(args.input_root, args.input_format)
@@ -290,7 +296,7 @@ def main() -> int:
         "num_workers_requested": args.num_workers,
         "num_workers": effective_num_workers,
         "overwrite": bool(args.overwrite),
-        "archive_format": normalize_archive_format(args.archive_format),
+        "archive_format": archive_format,
         "summary_mode": args.summary_mode,
         "success_mu_thresh": args.success_mu_thresh,
         "sam_prompt_batch_size": int(args.sam_prompt_batch_size),
@@ -349,15 +355,50 @@ def _label_worker_cap() -> int:
         return 20
 
 
+def _sam_worker_cap() -> int:
+    """Maximum MobileSAM processes permitted per visible GPU.
+
+    A single SAM process is the conservative default, because every process
+    owns a complete CUDA model.  Hosts with sufficient VRAM can deliberately
+    raise this for I/O-heavy object-cloud generation; the caller is still
+    responsible for benchmarking the selected value.
+    """
+    raw = os.environ.get("GRARE_PREPARE_MAX_SAM_WORKERS")
+    if raw is not None and raw.strip() != "":
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            return 1
+
+    # Two MobileSAM contexts used about 11.5 GiB on the 32 GiB RTX 5090 and
+    # sustained a higher throughput by overlapping input/output work with GPU
+    # inference.  Keep the conservative single-context behaviour on smaller
+    # cards; users can always override through the environment variable above.
+    try:
+        import torch
+
+        if torch.cuda.is_available() and torch.cuda.device_count() > 0:
+            total_vram = min(
+                int(torch.cuda.get_device_properties(index).total_memory)
+                for index in range(torch.cuda.device_count())
+            )
+            if total_vram >= 24 * 1024**3:
+                return 2
+    except Exception:
+        pass
+    return 1
+
+
 def _effective_prepare_workers(requested: int, *, stage: str, sam_device: str, sam_enabled: bool) -> int:
     """Prevent process oversubscription and one-GPU MobileSAM replication."""
     requested = max(1, int(requested))
     if sam_enabled and str(sam_device).strip().lower().startswith("cuda"):
-        # Each worker owns a complete MobileSAM model and CUDA context. More
-        # workers than visible GPUs replicate the model and commonly OOM or
-        # deadlock on a single-GPU container.
-        limit = max(1, _visible_cuda_device_count())
-        reason = "visible GPU count for CUDA-backed SAM"
+        # Each worker owns a complete MobileSAM model and CUDA context. Keep
+        # one process per device by default, but permit a deliberately raised
+        # per-device cap on high-VRAM hosts where input I/O leaves the GPU idle.
+        replicas = _sam_worker_cap()
+        limit = max(1, _visible_cuda_device_count()) * replicas
+        reason = f"visible GPU count × SAM-worker cap ({replicas}/GPU)"
     else:
         limit = max(1, effective_cpu_count())
         reason = "effective CPU quota"
