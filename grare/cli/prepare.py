@@ -382,7 +382,8 @@ def _sam_worker_cap() -> int:
                 int(torch.cuda.get_device_properties(index).total_memory)
                 for index in range(torch.cuda.device_count())
             )
-            if total_vram >= 32 * 1024**3:
+            # Consumer cards marketed as 32 GB commonly report about 30.4 GiB.
+            if total_vram >= 30 * 1024**3:
                 return 4
             if total_vram >= 24 * 1024**3:
                 return 2
