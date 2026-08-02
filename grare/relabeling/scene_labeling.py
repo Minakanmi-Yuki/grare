@@ -578,6 +578,15 @@ class BatchAnalyticRelabeler:
                 chunk_done = 0
                 started = time.perf_counter()
                 last_report = started
+                # `augment` commonly rewrites local-cloud archives in place
+                # while writing object_cloud to a sidecar. The main output
+                # tree therefore already contains every input archive before
+                # this stage starts and cannot represent its progress.
+                progress_root = (
+                    object_cloud_root
+                    if worker_mode == "augment" and object_cloud_root is not None
+                    else output_root
+                )
                 results = pool.imap_unordered(
                     _process_relabel_chunk, enumerate(relative_chunks, start=1)
                 )
@@ -607,7 +616,7 @@ class BatchAnalyticRelabeler:
                     if now - last_report < _PROGRESS_LOG_INTERVAL_SEC:
                         continue
                     last_report = now
-                    written = _count_written_outputs(output_root)
+                    written = _count_written_outputs(progress_root)
                     done = min(max(written - skipped, 0), total_pending)
                     elapsed = now - started
                     rate = done / elapsed if elapsed > 0 else 0.0
