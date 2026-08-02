@@ -168,7 +168,8 @@ The normal `grare-dump` and `grare-prepare` commands use the recommended
 defaults. The environment file sets one thread per BLAS process unless you have
 already chosen another value. Labels default to up to 20 CPU workers; the SAM
 object stage selects a safe worker count from the number of visible GPUs and
-their VRAM. Both choices can be overridden with `--num-workers` for a measured
+their VRAM. Point-MAE precomputation uses a memory-safe 2,048-candidate GPU
+batch. Worker choices can be overridden with `--num-workers` for a measured
 host-specific experiment.
 
 All dump and feature-construction stages skip completed files. Re-run the same

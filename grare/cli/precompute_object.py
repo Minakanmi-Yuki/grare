@@ -41,6 +41,12 @@ from grare.relabeling.archive_io import (
 )
 
 
+# A Point-MAE forward expands every object cloud into 32 local groups.  4096
+# candidates therefore exceeds 32 GB once the patch encoder's intermediates
+# are included.  2048 saturates the tested RTX 5090 without an OOM.
+DEFAULT_BATCH_SIZE = 2048
+
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Precompute frozen Point-MAE object pooled features.")
     p.add_argument("--archive-root", required=True,
@@ -59,7 +65,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--shard", type=int, default=0,
         help="This process's shard index in [0, num_shards). Strided slice "
              "archives[shard::num_shards] — disjoint across shards.")
-    p.add_argument("--batch-size", type=int, default=4096,
+    p.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE,
         help="Candidates per backbone forward (independent of training batch).")
     p.add_argument("--object-cloud-points", type=int, default=512)
     p.add_argument("--object-hidden-dim", type=int, default=128)

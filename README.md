@@ -289,7 +289,8 @@ done
 
 The remaining two feature stages run once for each split. Their defaults are
 resource-aware: labels use up to 20 CPU workers; MobileSAM uses a safe number
-of workers for the visible GPUs and their memory. No tuning flags are required.
+of workers for the visible GPUs and their memory; Point-MAE uses a safe
+2,048-candidate GPU batch. No tuning flags are required.
 
 ```bash
 for SPLIT in train test; do
