@@ -86,11 +86,10 @@ validate the complete feature-construction input set:
 
 ## 3. Construct features
 
-Run `grare-prepare` once for train dumps and once for test dumps. Use the
-reported shell boundaries `(0, 5, 15, 25, 40)` mm, per-shell budgets
-`(64, 128, 128, 192)`, and 512 object points. The command in the root
-[README](../README.md#prepare) is the canonical
-invocation.
+Run the three preparation stages once for train dumps and once for test dumps.
+Use the reported shell boundaries `(0, 5, 15, 25, 40)` mm, per-shell budgets
+`(64, 128, 128, 192)`, and 512 object points. The compact canonical invocation
+is in the root [Quick Start](../README.md#quick-start).
 
 Store object clouds in a sidecar tree and precompute the frozen Point-MAE
 features:
@@ -162,3 +161,48 @@ Novel splits.
 
 Use the complete official test dump for any numerical comparison with the
 paper values in [RESULTS.md](RESULTS.md).
+
+## 6. Runtime tuning and recovery
+
+The normal `grare-dump` and `grare-prepare` commands use the recommended
+defaults. The environment file sets one thread per BLAS process unless you have
+already chosen another value. Labels default to up to 20 CPU workers; the SAM
+object stage selects a safe worker count from the number of visible GPUs and
+their VRAM. Both choices can be overridden with `--num-workers` for a measured
+host-specific experiment.
+
+All dump and feature-construction stages skip completed files. Re-run the same
+command after an interruption. Use `--limit 1` on `grare-prepare` or
+`--max-batches 1` on `grare-dump` for a small debugging run.
+
+GN and SBG can partition a dump across GPUs; each process receives a disjoint
+shard. EconomicGrasp does not support dump sharding:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 grare-dump --detector graspnet_baseline --camera realsense \
+  --split train --index-shard-count 2 --index-shard-id 0 &
+CUDA_VISIBLE_DEVICES=1 grare-dump --detector graspnet_baseline --camera realsense \
+  --split train --index-shard-count 2 --index-shard-id 1 &
+wait
+```
+
+Use `--deterministic` only when fixed-machine dump reproducibility is required;
+it is slower. Fresh detector dumps on another GPU, CUDA version, or driver can
+vary slightly in floating-point confidence values.
+
+For the GN-Kinect and EG-Kinect configurations, build the packed training tree
+after object-feature precomputation:
+
+```bash
+grare-pack \
+  --input-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/kinect/local_cloud/train" \
+  --object-pooled-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/kinect/object_pooled/train" \
+  --output-root "$GRARE_DATA_ROOT/packed/graspnet_baseline/kinect/train" \
+  --archive-manifest auto --require-archive-manifest --require-object-pooled
+```
+
+Run `grare-run --config ... --dry-run` to inspect a resolved command graph.
+For a detector-only AP baseline, run the rerank/evaluation stages with
+`--set rerank.lambda=0.0`; the artifacts use separate
+`*_detector_baseline` directories. Official AP requires all 90 test scenes and
+all 256 frames per scene.

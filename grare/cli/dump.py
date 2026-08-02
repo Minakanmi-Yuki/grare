@@ -45,9 +45,12 @@ from grare.detectors.scale_balanced_grasp_wrapper import (
 )
 from grare.utils.cpu import cgroup_cpu_quota, effective_cpu_count
 from grare.utils.experiment_logging import timestamp, write_json
+from grare.utils.runtime import configure_thread_pools
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+configure_thread_pools()
 
 DETECTORS = ("graspnet_baseline", "scale_balanced_grasp", "economicgrasp")
 CAMERAS = ("realsense", "kinect")

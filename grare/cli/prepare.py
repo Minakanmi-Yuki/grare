@@ -8,6 +8,10 @@ import os
 from pathlib import Path
 import time
 
+from grare.utils.runtime import configure_thread_pools
+
+configure_thread_pools()
+
 import numpy as np
 
 from grare.utils.experiment_logging import (
@@ -80,7 +84,16 @@ def parse_args() -> argparse.Namespace:
         help="Comma-separated per-shell budgets (sum overrides --local-cloud-max-points).",
     )
     parser.add_argument("--voxel-size", type=float, default=0.008)
-    parser.add_argument("--num-workers", type=int, default=1)
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=None,
+        help=(
+            "Worker processes. Defaults to the resource-aware setting for the selected "
+            "stage: up to 20 CPU workers for labels, or the safe MobileSAM replica "
+            "count for object."
+        ),
+    )
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--success-mu-thresh", type=float, default=0.4)
     parser.add_argument("--object-cloud-points", type=int, default=512)
@@ -154,6 +167,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.stage == "object" and not args.sam_checkpoint:
+        raise SystemExit("--stage object requires --sam-checkpoint")
     if args.flatten_camera_dir:
         os.environ["GRARE_FLATTEN_CAMERA_DIR"] = "1"
     if args.benchmark != "graspnet":
@@ -178,8 +193,6 @@ def main() -> int:
     # --stage labels is the CPU-bound pass: keep SAM off even when a checkpoint is
     # supplied, so it can run at a high --num-workers without touching the GPU.
     sam_enabled = bool(args.sam_checkpoint) and args.stage != "labels"
-    if args.stage == "object" and not sam_enabled:
-        raise SystemExit("--stage object requires --sam-checkpoint")
     sam_cfg = SamObjectCloudConfig(
         enabled=sam_enabled,
         checkpoint=str(args.sam_checkpoint or ""),
@@ -194,8 +207,17 @@ def main() -> int:
         fps_workers=max(1, int(args.object_fps_workers)),
         fps_input_max_points=max(0, int(args.object_fps_input_max_points)),
     )
+    requested_num_workers = (
+        int(args.num_workers)
+        if args.num_workers is not None
+        else _default_prepare_workers(
+            stage=args.stage,
+            sam_device=args.sam_device,
+            sam_enabled=sam_enabled,
+        )
+    )
     effective_num_workers = _effective_prepare_workers(
-        args.num_workers,
+        requested_num_workers,
         stage=args.stage,
         sam_device=args.sam_device,
         sam_enabled=sam_enabled,
@@ -293,7 +315,7 @@ def main() -> int:
         "pattern": input_pattern,
         "output_pattern": output_pattern,
         "limit": args.limit,
-        "num_workers_requested": args.num_workers,
+        "num_workers_requested": requested_num_workers,
         "num_workers": effective_num_workers,
         "overwrite": bool(args.overwrite),
         "archive_format": archive_format,
@@ -389,6 +411,15 @@ def _sam_worker_cap() -> int:
                 return 2
     except Exception:
         pass
+    return 1
+
+
+def _default_prepare_workers(*, stage: str, sam_device: str, sam_enabled: bool) -> int:
+    """Choose the no-flag worker count for the split preparation stages."""
+    if sam_enabled and str(sam_device).strip().lower().startswith("cuda"):
+        return max(1, _visible_cuda_device_count()) * _sam_worker_cap()
+    if stage == "labels":
+        return min(max(1, effective_cpu_count()), _label_worker_cap())
     return 1
 
 

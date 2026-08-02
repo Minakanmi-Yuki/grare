@@ -98,6 +98,11 @@ write_env_file() {
   printf 'export GRARE_OUTPUT_ROOT=%q\n' "$output_root" >> "$env_file"
   printf 'export GRARE_SAM_CKPT=%q\n' "$backbone_dir/mobile_sam.pt" >> "$env_file"
   printf 'export GRARE_POINT_MAE_CKPT=%q\n' "$backbone_dir/point_mae_pretrain.pth" >> "$env_file"
+  printf '%s\n' '# Prevent one thread pool per worker; explicit user settings take precedence.' >> "$env_file"
+  printf '%s\n' 'export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"' >> "$env_file"
+  printf '%s\n' 'export MKL_NUM_THREADS="${MKL_NUM_THREADS:-1}"' >> "$env_file"
+  printf '%s\n' 'export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}"' >> "$env_file"
+  printf '%s\n' 'export NUMEXPR_NUM_THREADS="${NUMEXPR_NUM_THREADS:-1}"' >> "$env_file"
 }
 
 show_plan

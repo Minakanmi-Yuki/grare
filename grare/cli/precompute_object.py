@@ -28,6 +28,10 @@ import os
 from pathlib import Path
 import time
 
+from grare.utils.runtime import configure_thread_pools
+
+configure_thread_pools()
+
 import numpy as np
 
 from grare.relabeling.archive_io import (

@@ -257,225 +257,72 @@ $GRARE_ASSET_WORKSPACE/
 These five detector-camera checkpoints correspond to the five reported
 settings.
 
-Verify that all downloaded assets are in place before generating candidate
-dumps:
+Verify the assets needed by the Quick Start before generating candidate dumps:
 
 ```bash
-./scripts/check_downloaded_assets.sh
+./scripts/check_downloaded_assets.sh --detector graspnet_baseline --camera realsense
 ```
 
-## Prepare
+Omit `--detector` and `--camera` to verify every published detector checkpoint.
 
-First, run each frozen detector with its downloaded checkpoint on the GraspNet
-train and test splits, retaining every unchanged `(K, 17)` GraspGroup output.
-This requires the detector sources and CUDA extensions from
-[Installation](#installation).
+## Quick Start
 
-`grare-dump` runs a frozen detector over one split and writes the dumps that
-`grare-prepare` consumes. Repeat it for each detector, camera, and split used by
-the setting you want to reproduce:
+The following is the complete, single-GPU pipeline for the shortest supported
+setting: GraspNet-Baseline with RealSense. It assumes that [Installation](#installation)
+and [Downloads](#downloads) are complete. The generated environment file also
+sets safe one-thread defaults for BLAS libraries, without overriding values you
+set yourself.
 
 ```bash
-grare-dump --detector graspnet_baseline --camera realsense --split train
-grare-dump --detector graspnet_baseline --camera realsense --split test
-```
-
-Add `--deterministic` for bit-reproducible dumps on a fixed machine: the
-upstream detectors use nondeterministic CUDA kernels, so repeated runs
-otherwise vary the confidence column by roughly `1e-4` without changing grasp
-poses. Use `--dry-run` to preview the upstream command.
-
-The recommended dump settings are stored in the detector configs, so the
-optimized command needs no tuning flags. They use batch size 24, eight data
-workers, 32 post-process workers, prefetch factor 4, pinned memory, and resume
-from existing files:
-
-For the small container CPU quota, also limit NumPy/BLAS thread pools once per
-shell (these variables are not detector-config parameters):
-
-```bash
-export OMP_NUM_THREADS=1
-export MKL_NUM_THREADS=1
-export OPENBLAS_NUM_THREADS=1
-export NUMEXPR_NUM_THREADS=1
-```
-
-```bash
-grare-dump --detector graspnet_baseline --camera realsense --split test
-```
-
-For SBG and EG, replace the detector name. GN, SBG, and EG now all use the
-configured post-processing worker pool. GN and SBG should report
-`"shared_collision_cloud": true` in their startup JSON after
-`scripts/build_detector_extensions.sh` has been run.
-
-GN and SBG can also be split across GPUs with `--index-shard-count` and
-`--index-shard-id`; EG does not support sharding and rejects those flags:
-
-```bash
-CUDA_VISIBLE_DEVICES=0 grare-dump --detector graspnet_baseline --camera realsense \
-  --split train --index-shard-count 2 --index-shard-id 0 &
-CUDA_VISIBLE_DEVICES=1 grare-dump --detector graspnet_baseline --camera realsense \
-  --split train --index-shard-count 2 --index-shard-id 1 &
-wait
-```
-
-These flags change throughput only, not which candidates the detector emits.
-Use the same values for the train and test splits of one setting, though: dumps
-regenerated under different conditions vary slightly, so mixing them
-introduces avoidable inconsistency between the two splits.
-
-Regenerated dumps are not expected to match another machine's dumps exactly.
-GPU model, driver, and CUDA version shift the detector's float outputs
-slightly, and Scale-Balanced-Grasp additionally applies a score threshold, so
-its candidate count can differ by a few grasps between machines. GraRe
-re-ranks whichever candidate set the detector produces, so AP reproduced from
-freshly generated dumps can differ marginally from the reported values.
-
-Dumps are written per detector and split, with the camera below each scene:
-
-```text
-$GRARE_DUMP_ROOT/$DETECTOR/
-├── train/scene_0000/$CAMERA/0000.npy
-└── test/scene_0100/$CAMERA/0000.npy
-```
-
-The five reported settings need these dump groups:
-
-```text
-graspnet_baseline     realsense + kinect
-scale_balanced_grasp  realsense
-economicgrasp         realsense + kinect
-```
-
-Once the dumps exist, confirm the complete feature-construction input set:
-
-```bash
-./scripts/check_downloaded_assets.sh --with-dumps
-```
-
-Then set the detector once and prepare one split. The recommended command
-separates the CPU labels pass from the single-GPU SAM pass. It reproduces the
-reported four shells, per-shell sampling budgets, and 512-point clouds:
-
-```bash
+source "$GRARE_ASSET_WORKSPACE/grare_paths.env"
 DETECTOR=graspnet_baseline
 CAMERA=realsense
-SPLIT=train
-export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
 
-# CPU: analytic labels and local geometry
-grare-prepare --stage labels --num-workers 20 \
-  --input-root "$GRARE_DUMP_ROOT/$DETECTOR/$SPLIT" \
-  --pattern "scene_*/$CAMERA/*.npy" --input-format detector-dump \
-  --output-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/local_cloud/$SPLIT" \
-  --detector "$DETECTOR" --dataset-root "$GRASPNET_ROOT" \
-  --camera "$CAMERA" --split "$SPLIT" --omit-object-cloud
+./scripts/check_downloaded_assets.sh --detector "$DETECTOR" --camera "$CAMERA"
 
-# GPU: add MobileSAM object clouds (one worker on a single GPU)
-grare-prepare --stage object --num-workers 1 \
-  --input-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/local_cloud/$SPLIT" \
-  --output-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/local_cloud/$SPLIT" \
-  --object-cloud-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/object_cloud/$SPLIT" \
-  --detector "$DETECTOR" --dataset-root "$GRASPNET_ROOT" \
-  --camera "$CAMERA" --split "$SPLIT" \
-  --sam-checkpoint "$GRARE_SAM_CKPT" \
-  --sam-prompt-batch-size 64 --object-fps-workers 8 \
-  --omit-object-cloud --no-manifest
+for SPLIT in train test; do
+  grare-dump --detector "$DETECTOR" --camera "$CAMERA" --split "$SPLIT"
+done
+
+./scripts/check_downloaded_assets.sh --detector "$DETECTOR" --camera "$CAMERA" --with-dumps
 ```
 
-The process is resumable: rerunning the same commands skips archives already
-written. Add `--limit 1` to the labels command for a one-frame smoke test, then
-set `SPLIT=test` for the test split.
-
-This stage runs over every frame of every scene and dominates preparation time.
-For the current container (25 CPU quota but roughly 96 GB cgroup memory), use
-twenty labels workers: each worker owns a GraspNet/Dex-Net scene cache, so CPU
-quota is not a safe memory limit. Keep the NumPy/BLAS pools at one thread per
-process. The stage is resumable: an interrupted run can be repeated with the
-same command and skips the frames it already wrote.
-
-Progress is reported every 30 seconds as a JSON line with the archive count,
-percentage, rate, and ETA, counted from the archives already on disk so it
-advances even mid-batch. Set `GRARE_PREPARE_LOG_EVERY_SEC` to report more often.
-The default `GRARE_PREPARE_CHUNK_SIZE=256` keeps each standard GraspNet scene in
-one task; smaller values increase repeated scene-cache loading.
-
-`--stage labels` keeps SAM off even if a checkpoint is passed, so it never
-touches the GPU. `--stage object` reuses the labels already on disk and only adds
-the object cloud. The two stages together produce byte-identical archives to the
-single-pass command, so pick whichever fits the host.
-
-Each object-stage worker holds its own MobileSAM model and CUDA context, so on a
-single-GPU machine `--num-workers 12` creates twelve model copies and can OOM or
-appear to hang. The prepare command now caps labels workers at both the
-effective CPU quota and a memory-safe default of twenty (override deliberately
-with `GRARE_PREPARE_MAX_LABEL_WORKERS`), and caps CUDA SAM workers at the number
-of visible GPUs. MobileSAM prompt decoding defaults to a batch of 64, and the
-single GPU worker uses eight CPU threads for independent mask FPS calls; lower
-`--sam-prompt-batch-size` or `--object-fps-workers` on a smaller host. Switching
-scenes evicts that cache and re-reads the scene's `dex_models` entries and object
-meshes, which are far larger than the frames themselves; frames of the same scene
-are grouped into scene-sized chunks (256 frames for the standard GraspNet layout)
-to keep the cache alive and avoid reloading the same meshes in multiple workers.
-Override this with `GRARE_PREPARE_CHUNK_SIZE` only for an unusual layout or a
-smoke test; smaller values increase repeated scene loading.
-
-On a mechanical disk those cache refills are the limiting factor, because several
-workers reading different scenes at once turn them into random I/O. Watch
-`%util` and `await` while a run is in progress and lower `--num-workers` if the
-disk is saturated:
+The remaining two feature stages run once for each split. Their defaults are
+resource-aware: labels use up to 20 CPU workers; MobileSAM uses a safe number
+of workers for the visible GPUs and their memory. No tuning flags are required.
 
 ```bash
-iostat -x 2
+for SPLIT in train test; do
+  grare-prepare --stage labels \
+    --input-root "$GRARE_DUMP_ROOT/$DETECTOR/$SPLIT" \
+    --pattern "scene_*/$CAMERA/*.npy" --input-format detector-dump \
+    --output-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/local_cloud/$SPLIT" \
+    --detector "$DETECTOR" --dataset-root "$GRASPNET_ROOT" \
+    --camera "$CAMERA" --split "$SPLIT" --omit-object-cloud
+
+  grare-prepare --stage object \
+    --input-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/local_cloud/$SPLIT" \
+    --output-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/local_cloud/$SPLIT" \
+    --object-cloud-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/object_cloud/$SPLIT" \
+    --detector "$DETECTOR" --dataset-root "$GRASPNET_ROOT" \
+    --camera "$CAMERA" --split "$SPLIT" --sam-checkpoint "$GRARE_SAM_CKPT" \
+    --omit-object-cloud --no-manifest
+
+  grare-precompute-object \
+    --archive-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/local_cloud/$SPLIT" \
+    --object-cloud-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/object_cloud/$SPLIT" \
+    --output-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/object_pooled/$SPLIT" \
+    --pmae-ckpt "$GRARE_POINT_MAE_CKPT"
+done
 ```
 
-Putting `dex_models/` and `models/` on an SSD addresses this directly and is
-cheaper than moving the whole dataset, since they are small next to the frames
-but account for most of the repeated reads:
+All three data stages are resumable: repeating the same block skips completed
+archives. The resulting `local_cloud`, `object_cloud`, and `object_pooled`
+trees are consumed by training.
 
-```bash
-# Copy first and verify before removing the original: a cross-filesystem move
-# that is interrupted leaves the data in neither place.
-cp -r "$GRASPNET_ROOT/dex_models" /path/on/ssd/dex_models
-diff -r "$GRASPNET_ROOT/dex_models" /path/on/ssd/dex_models && \
-  rm -rf "$GRASPNET_ROOT/dex_models" && \
-  ln -s /path/on/ssd/dex_models "$GRASPNET_ROOT/dex_models"
-```
+## Train and Evaluate
 
-With those on an SSD, only the frame reads stay on the mechanical disk.
-
-Precompute the frozen Point-MAE object features for the same split:
-
-```bash
-grare-precompute-object \
-  --archive-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/local_cloud/$SPLIT" \
-  --object-cloud-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/object_cloud/$SPLIT" \
-  --output-root "$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/object_pooled/$SPLIT" \
-  --pmae-ckpt "$GRARE_POINT_MAE_CKPT" --batch-size 4096
-```
-
-The precompute command fuses adjacent archives into GPU batches (default
-`--batch-size 4096`) and runs the frozen backbone in inference mode. Use
-`--num-shards N --shard K` to split the work across separate GPUs; keep one
-process per GPU.
-
-Set `SPLIT=test` and run it again. The resulting three input assets are:
-
-```text
-$GRARE_DATA_ROOT/relabeled/$DETECTOR/$CAMERA/
-├── local_cloud/       candidate attributes and shell-wise local geometry
-├── object_cloud/      MobileSAM object point clouds
-└── object_pooled/     frozen Point-MAE object features
-```
-
-Set `DETECTOR` and `CAMERA` to the detector-camera pair used by the selected
-configuration you are reproducing.
-
-## Train
-
-Training and everything after it need a GPU. The package provides five main
-configurations, one per reported setting:
+The package provides one configuration per reported setting:
 
 | Config | Frozen detector | Camera |
 | --- | --- | --- |
@@ -485,104 +332,28 @@ configurations, one per reported setting:
 | `configs/eg_realsense.yaml` | [EconomicGrasp](https://github.com/iSEE-Laboratory/EconomicGrasp) | RealSense |
 | `configs/eg_kinect.yaml` | [EconomicGrasp](https://github.com/iSEE-Laboratory/EconomicGrasp) | Kinect |
 
-Start with `gn_realsense`: it has the shortest supported path and does not need
-mmap packing. Every configuration uses batch size `2048`. Load the environment
-file written during [Downloads](#downloads) before invoking a configuration:
+Complete the Quick Start with:
 
 ```bash
-source "$GRARE_ASSET_WORKSPACE/grare_paths.env"
+grare-run --config configs/gn_realsense.yaml
 ```
 
-The Kinect GN and EG configurations read mmap-packed training features to
-preserve the reported 2048-candidate batch construction. Build the packed tree
-after object-feature precomputation, substituting the detector and camera of
-the configuration you are running:
+This trains, re-ranks, and runs the official evaluation in order. Outputs are
+written to `$GRARE_OUTPUT_ROOT/checkpoints/gn_realsense/`,
+`$GRARE_OUTPUT_ROOT/predictions/gn_realsense/`, and
+`$GRARE_OUTPUT_ROOT/evaluation/gn_realsense/`.
 
-```bash
-grare-pack \
-  --input-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/kinect/local_cloud/train" \
-  --object-pooled-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/kinect/object_pooled/train" \
-  --output-root "$GRARE_DATA_ROOT/packed/graspnet_baseline/kinect/train" \
-  --archive-manifest auto \
-  --require-archive-manifest \
-  --require-object-pooled
-```
-
-Inspect the resolved command graph before using a GPU:
-
-```bash
-grare-run --config configs/gn_realsense.yaml --dry-run
-```
-
-Then train and re-rank. Stopping after training gives a checkpoint gate before
-prediction files are written:
-
-```bash
-grare-run --config configs/gn_realsense.yaml --stop-after train
-grare-run --config configs/gn_realsense.yaml --start-from rerank --stop-after rerank
-```
-
-Training writes `best.pt` to `$GRARE_OUTPUT_ROOT/checkpoints/<name>/`, selected
-by held-out scene-level validation loss; test AP is never used to choose an
-epoch or a hyperparameter. Re-ranking writes evaluator-compatible `.npy` files
-plus a summary and per-frame records to `$GRARE_OUTPUT_ROOT/predictions/<name>/`.
-
-`grare-rerank` consumes the relabeled `.npz` archives from `grare-prepare`, not
-raw detector `.npy` dumps. It keeps every candidate and changes only the order.
-
-Each of the other four settings runs the same way once its features exist.
-Substitute its configuration name, and expect each one to take hours:
-
-```bash
-grare-run --config configs/eg_realsense.yaml --stop-after train
-```
-
-Use `--dry-run` to inspect a resolved command graph without touching the GPU,
-or `--set train.seed=11` for a different initialization seed.
-## Evaluate
-
-Run the official GraspNet evaluator on the re-ranked predictions:
-
-```bash
-grare-run --config configs/gn_realsense.yaml --start-from eval
-```
-
-This writes `per_scene_raw.npy` and `per_scene_raw.json` to
-`$GRARE_OUTPUT_ROOT/evaluation/<name>/`.
-
-Official AP requires the complete test protocol: all 90 test scenes and all 256
-frames per scene must have been re-ranked. `grare-evaluate` checks this before
-calling the evaluator and refuses an incomplete dump. A one-frame or one-scene
-run is useful for debugging the pipeline but must not be reported as an AP.
-
-To obtain the detector baseline that the reported gains are measured against,
-re-run the same configuration with `rerank.lambda=0.0`, which keeps the
-detector's own ranking. Its artifacts go to separate `*_detector_baseline`
-directories, so they cannot overwrite the GraRe results:
-
-```bash
-grare-run --config configs/gn_realsense.yaml --start-from rerank --set rerank.lambda=0.0
-```
-
-For paired scene-level confidence intervals between the two complete
-evaluations:
-
-```bash
-python scripts/paired_scene_bootstrap.py \
-  --baseline "$GRARE_OUTPUT_ROOT/evaluation/gn_realsense_detector_baseline/per_scene_raw.npy" \
-  --treatment "$GRARE_OUTPUT_ROOT/evaluation/gn_realsense/per_scene_raw.npy" \
-  --output paired_bootstrap.json
-```
-
-Compare the resulting AP with [Reported Results](#reported-results) and the
-interpretation in [docs/RESULTS.md](docs/RESULTS.md).
+To reproduce another setting, use its matching detector, camera, and config.
+GN-Kinect and EG-Kinect additionally require feature packing. Multi-GPU dumps,
+resume/debug commands, baseline comparison, feature packing, and performance
+guidance are in [docs/REPRODUCTION.md](docs/REPRODUCTION.md).
 ## Reported Results
 
 The following offline GraspNet-1Billion results use the official evaluation
 protocol. Values are AP (%); GraRe re-ranks the unchanged candidate set from
-each frozen detector. `—` denotes an unavailable result. The Detector rows are the baseline described in [Evaluate](#evaluate). See
-[docs/RESULTS.md](docs/RESULTS.md) for the reproduction context and compact
-gain summary.
+each frozen detector. `—` denotes an unavailable result. The Detector rows are
+the corresponding frozen-detector baselines. See [docs/RESULTS.md](docs/RESULTS.md)
+for the reproduction context and compact gain summary.
 
 ### RealSense
 

@@ -10,9 +10,12 @@ import sys
 from typing import Any
 
 from grare.config import load_config
+from grare.utils.runtime import configure_thread_pools
 
 
 STAGES = ("train", "rerank", "eval")
+
+configure_thread_pools()
 
 
 def parse_args() -> argparse.Namespace:

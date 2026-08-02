@@ -17,6 +17,8 @@ Options:
   --sam-checkpoint FILE            MobileSAM checkpoint
   --point-mae-checkpoint FILE      Point-MAE checkpoint
   --dump-root DIR                  Frozen-detector dump root
+  --detector NAME                  Check one detector checkpoint instead of all
+  --camera NAME                    Camera for --detector (realsense or kinect)
   --with-dumps                     Also require frozen-detector .npy dumps
                                    (use before Stage 3 feature construction)
   -h, --help                       Show this help text
@@ -30,6 +32,8 @@ sam_checkpoint="${GRARE_SAM_CKPT:-}"
 point_mae_checkpoint="${GRARE_POINT_MAE_CKPT:-}"
 dump_root="${GRARE_DUMP_ROOT:-}"
 with_dumps=false
+detector=""
+camera="realsense"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -40,6 +44,14 @@ while [[ $# -gt 0 ]]; do
     --with-dumps)
       with_dumps=true
       shift
+      ;;
+    --detector)
+      detector="$2"
+      shift 2
+      ;;
+    --camera)
+      camera="$2"
+      shift 2
       ;;
     --workspace)
       workspace="$2"
@@ -119,11 +131,44 @@ check_dir 'GraspNet models' "$graspnet_root/models" 'nontextured.ply'
 check_dir 'GraspNet dex_models' "$graspnet_root/dex_models" '*.pkl'
 check_file 'MobileSAM weight' "$sam_checkpoint"
 check_file 'Point-MAE weight' "$point_mae_checkpoint"
-check_file 'GN RealSense checkpoint' "$detector_checkpoint_root/graspnet_baseline/checkpoint-rs.tar"
-check_file 'GN Kinect checkpoint' "$detector_checkpoint_root/graspnet_baseline/checkpoint-kn.tar"
-check_file 'SBG RealSense checkpoint' "$detector_checkpoint_root/scale_balanced_grasp/log_full_model/checkpoint.tar"
-check_file 'EG RealSense checkpoint' "$detector_checkpoint_root/economicgrasp/economicgrasp_realsense.tar"
-check_file 'EG Kinect checkpoint' "$detector_checkpoint_root/economicgrasp/economicgrasp_kinect.tar"
+
+check_selected_checkpoint() {
+  case "$detector:$camera" in
+    graspnet_baseline:realsense)
+      check_file 'GN RealSense checkpoint' "$detector_checkpoint_root/graspnet_baseline/checkpoint-rs.tar"
+      ;;
+    graspnet_baseline:kinect)
+      check_file 'GN Kinect checkpoint' "$detector_checkpoint_root/graspnet_baseline/checkpoint-kn.tar"
+      ;;
+    scale_balanced_grasp:realsense)
+      check_file 'SBG RealSense checkpoint' "$detector_checkpoint_root/scale_balanced_grasp/log_full_model/checkpoint.tar"
+      ;;
+    economicgrasp:realsense)
+      check_file 'EG RealSense checkpoint' "$detector_checkpoint_root/economicgrasp/economicgrasp_realsense.tar"
+      ;;
+    economicgrasp:kinect)
+      check_file 'EG Kinect checkpoint' "$detector_checkpoint_root/economicgrasp/economicgrasp_kinect.tar"
+      ;;
+    scale_balanced_grasp:kinect)
+      printf 'UNSUPPORTED: Scale-Balanced-Grasp has no published Kinect checkpoint.\n' >&2
+      failed=1
+      ;;
+    *)
+      printf 'INVALID: --detector must be graspnet_baseline, scale_balanced_grasp, or economicgrasp; --camera must be realsense or kinect.\n' >&2
+      failed=1
+      ;;
+  esac
+}
+
+if [[ -n "$detector" ]]; then
+  check_selected_checkpoint
+else
+  check_file 'GN RealSense checkpoint' "$detector_checkpoint_root/graspnet_baseline/checkpoint-rs.tar"
+  check_file 'GN Kinect checkpoint' "$detector_checkpoint_root/graspnet_baseline/checkpoint-kn.tar"
+  check_file 'SBG RealSense checkpoint' "$detector_checkpoint_root/scale_balanced_grasp/log_full_model/checkpoint.tar"
+  check_file 'EG RealSense checkpoint' "$detector_checkpoint_root/economicgrasp/economicgrasp_realsense.tar"
+  check_file 'EG Kinect checkpoint' "$detector_checkpoint_root/economicgrasp/economicgrasp_kinect.tar"
+fi
 
 if [[ "$with_dumps" == true ]]; then
   if find -L "$dump_root" -type f -name '*.npy' -print -quit 2>/dev/null | grep -q .; then
