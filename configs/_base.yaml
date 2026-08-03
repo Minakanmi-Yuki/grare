@@ -50,7 +50,7 @@ train:
 rerank:
   lambda: 1.0
   score_normalization: zscore
-  num_workers: 1
+  num_workers: 4
   device: cuda
 
 eval:

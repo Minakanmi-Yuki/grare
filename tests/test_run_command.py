@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from grare.cli.run import _rerank_command, _train_command
+from grare.cli.run import _pack_command, _pack_execution, _rerank_command, _train_command
 
 
 def _config(*, resume_from: str | None) -> dict:
@@ -57,6 +57,50 @@ def test_kinect_packed_command_uses_packed_loader_only() -> None:
     assert "--packed-dataset-root" in command
     assert "--archive-batch-sampling" not in command
     assert "--object-pooled-root" not in command
+
+
+def test_kinect_pack_command_uses_lazy_feature_inputs() -> None:
+    config = _config(resume_from=None)
+    config["paths"]["packed_train"] = "/data/packed"
+    command = _pack_command(config)
+    assert command is not None
+    assert "--input-root" in command
+    assert "--output-root" in command
+    assert "--object-pooled-root" in command
+    assert "--require-object-pooled" in command
+    assert "--require-archive-manifest" in command
+    assert "--include-object-cloud" not in command
+
+
+def test_realsense_pack_command_is_not_configured() -> None:
+    assert _pack_command(_config(resume_from=None)) is None
+
+
+def test_pack_execution_reuses_completed_output_and_replaces_partial_output(tmp_path) -> None:
+    config = _config(resume_from=None)
+    output_root = tmp_path / "packed"
+    config["paths"]["packed_train"] = str(output_root)
+
+    command, skipped = _pack_execution(config, repack=False)
+    assert command is not None
+    assert "--overwrite" not in command
+    assert skipped is None
+
+    output_root.mkdir()
+    command, skipped = _pack_execution(config, repack=False)
+    assert command is not None
+    assert "--overwrite" in command
+    assert skipped is None
+
+    (output_root / "index.json").write_text("{}", encoding="utf-8")
+    command, skipped = _pack_execution(config, repack=False)
+    assert command is None
+    assert skipped is not None
+
+    command, skipped = _pack_execution(config, repack=True)
+    assert command is not None
+    assert "--overwrite" in command
+    assert skipped is None
 
 
 def test_rerank_command_uses_fixed_protocol_arguments() -> None:

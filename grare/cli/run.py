@@ -1,4 +1,4 @@
-"""Run the training, re-ranking, and evaluation stages for one configuration."""
+"""Run the optional packing, training, re-ranking, and evaluation stages."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from grare.config import load_config
 from grare.utils.runtime import configure_thread_pools
 
 
-STAGES = ("train", "rerank", "eval")
+STAGES = ("pack", "train", "rerank", "eval")
 
 configure_thread_pools()
 
@@ -21,8 +21,13 @@ configure_thread_pools()
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
-    parser.add_argument("--start-from", choices=STAGES, default="train")
+    parser.add_argument("--start-from", choices=STAGES, default="pack")
     parser.add_argument("--stop-after", choices=STAGES, default="eval")
+    parser.add_argument(
+        "--repack",
+        action="store_true",
+        help="Rebuild the configured packed training dataset before training.",
+    )
     parser.add_argument("--set", action="append", default=[], dest="overrides")
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
@@ -110,6 +115,38 @@ def _train_command(config: dict[str, Any]) -> list[str]:
     return command
 
 
+def _packed_index_path(config: dict[str, Any]) -> Path | None:
+    """Return the configured packed-dataset index, when this config uses one."""
+    packed_train = config["paths"].get("packed_train")
+    return None if not packed_train else Path(packed_train) / "index.json"
+
+
+def _pack_command(config: dict[str, Any]) -> list[str] | None:
+    """Build the pack command required by packed-mmap training configs.
+
+    Configurations without ``paths.packed_train`` intentionally retain lazy
+    archive loading, so they have no packing stage.
+    """
+    paths = config["paths"]
+    packed_train = paths.get("packed_train")
+    if not packed_train:
+        return None
+    return _module_command("grare.cli.pack") + [
+        "--input-root",
+        paths["local_cloud_train"],
+        "--camera",
+        config["camera"],
+        "--output-root",
+        str(packed_train),
+        "--object-pooled-root",
+        paths["object_pooled_train"],
+        "--require-object-pooled",
+        "--archive-manifest",
+        "auto",
+        "--require-archive-manifest",
+    ]
+
+
 def _is_detector_baseline(config: dict[str, Any]) -> bool:
     """A lambda=0.0 run keeps the detector's own ranking (the AP baseline)."""
     return float(config["rerank"]["lambda"]) == 0.0
@@ -165,6 +202,28 @@ def _eval_command(config: dict[str, Any]) -> list[str]:
     ]
 
 
+def _pack_execution(
+    config: dict[str, Any],
+    *,
+    repack: bool,
+) -> tuple[list[str] | None, str | None]:
+    """Return a pack command or the reason that packing is unnecessary.
+
+    A completed pack is immutable input to mmap-backed training, so the normal
+    path reuses it.  A partial output directory is safe to replace because
+    ``grare-pack --overwrite`` refuses unknown files before deleting anything.
+    """
+    command = _pack_command(config)
+    index_path = _packed_index_path(config)
+    if command is None or index_path is None:
+        return None, "no packed_train configured"
+    if index_path.is_file() and not repack:
+        return None, f"existing packed dataset at {index_path.parent}"
+    if repack or index_path.parent.exists():
+        command.append("--overwrite")
+    return command, None
+
+
 def main() -> int:
     args = parse_args()
     config = load_config(
@@ -178,7 +237,25 @@ def main() -> int:
         raise ValueError("--stop-after precedes --start-from")
     builders = {"train": _train_command, "rerank": _rerank_command, "eval": _eval_command}
     for stage in STAGES[start : stop + 1]:
-        command = builders[stage](config)
+        if stage == "pack":
+            if args.dry_run:
+                command = _pack_command(config)
+                skipped_reason = "no packed_train configured" if command is None else None
+                index_path = _packed_index_path(config)
+                if (
+                    command is not None
+                    and args.repack
+                    and index_path is not None
+                    and index_path.parent.exists()
+                ):
+                    command.append("--overwrite")
+            else:
+                command, skipped_reason = _pack_execution(config, repack=args.repack)
+            if command is None:
+                print(f"[pack] skipped: {skipped_reason}", flush=True)
+                continue
+        else:
+            command = builders[stage](config)
         print(f"[{stage}] {shlex.join(command)}", flush=True)
         if not args.dry_run:
             subprocess.run(command, check=True)

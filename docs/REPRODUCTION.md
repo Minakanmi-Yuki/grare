@@ -176,6 +176,25 @@ All dump and feature-construction stages skip completed files. Re-run the same
 command after an interruption. Use `--limit 1` on `grare-prepare` or
 `--max-batches 1` on `grare-dump` for a small debugging run.
 
+Reranking uses four GPU worker processes by default. Evaluation checkpoints
+each annotation under `<save-raw>.shards`; if it is interrupted, resume only
+the pending work without reranking or deleting completed shards:
+
+```bash
+grare-run --config configs/gn_realsense.yaml --start-from eval
+```
+
+Do not pass `--force` to `grare-evaluate` when resuming, because it deletes
+those checkpoints.
+
+If a previous object stage changed an existing `local_cloud` archive tree and
+the training command reports a stale manifest, rebuild only the index; this
+does not rerun analytic labels:
+
+```bash
+grare-manifest --input-root "$GRARE_DATA_ROOT/relabeled/graspnet_baseline/realsense/local_cloud/train"
+```
+
 GN and SBG can partition a dump across GPUs; each process receives a disjoint
 shard. EconomicGrasp does not support dump sharding:
 

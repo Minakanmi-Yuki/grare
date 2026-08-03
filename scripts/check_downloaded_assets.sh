@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verify only the assets acquired in the README Downloads section.
+# Verify downloaded assets and, when requested, generated GraRe data.
 set -euo pipefail
 
 usage() {
@@ -7,8 +7,9 @@ usage() {
 Usage: ./scripts/check_downloaded_assets.sh [options]
 
 Verify GraspNet-1Billion, the MobileSAM and Point-MAE weights, and the five
-published detector checkpoints. Candidate dumps are generated later, so they
-are only checked when --with-dumps is passed.
+published detector checkpoints. --with-dumps additionally verifies detector
+outputs. --with-features verifies the complete GraRe feature tree for one
+detector-camera setting.
 
 Options:
   --workspace DIR                  Asset workspace (default: $GRARE_ASSET_WORKSPACE or ./grare-assets)
@@ -17,10 +18,13 @@ Options:
   --sam-checkpoint FILE            MobileSAM checkpoint
   --point-mae-checkpoint FILE      Point-MAE checkpoint
   --dump-root DIR                  Frozen-detector dump root
+  --data-root DIR                  GraRe generated-data root
   --detector NAME                  Check one detector checkpoint instead of all
   --camera NAME                    Camera for --detector (realsense or kinect)
   --with-dumps                     Also require frozen-detector .npy dumps
-                                   (use before Stage 3 feature construction)
+  --with-features                  Also require complete labels, object-cloud,
+                                   Point-MAE, and manifest outputs for the
+                                   selected --detector and --camera
   -h, --help                       Show this help text
 EOF
 }
@@ -31,7 +35,9 @@ detector_checkpoint_root="${GRARE_DETECTOR_CKPT_ROOT:-}"
 sam_checkpoint="${GRARE_SAM_CKPT:-}"
 point_mae_checkpoint="${GRARE_POINT_MAE_CKPT:-}"
 dump_root="${GRARE_DUMP_ROOT:-}"
+data_root="${GRARE_DATA_ROOT:-}"
 with_dumps=false
+with_features=false
 detector=""
 camera="realsense"
 
@@ -44,6 +50,14 @@ while [[ $# -gt 0 ]]; do
     --with-dumps)
       with_dumps=true
       shift
+      ;;
+    --with-features)
+      with_features=true
+      shift
+      ;;
+    --data-root)
+      data_root="$2"
+      shift 2
       ;;
     --detector)
       detector="$2"
@@ -90,6 +104,12 @@ detector_checkpoint_root="${detector_checkpoint_root:-$workspace/detector_checkp
 sam_checkpoint="${sam_checkpoint:-$workspace/backbones/mobile_sam.pt}"
 point_mae_checkpoint="${point_mae_checkpoint:-$workspace/backbones/point_mae_pretrain.pth}"
 dump_root="${dump_root:-$workspace/detector_dumps}"
+data_root="${data_root:-$workspace/grare_data}"
+
+if [[ "$with_features" == true && -z "$detector" ]]; then
+  printf '%s\n' '--with-features requires --detector and --camera.' >&2
+  exit 2
+fi
 
 failed=0
 checked=0
@@ -122,6 +142,74 @@ check_file() {
     printf 'MISSING: %s: %s\n' "$label" "$path" >&2
     failed=1
   fi
+}
+
+count_files() {
+  local path="$1" pattern="$2"
+  if [[ ! -d "$path" ]]; then
+    printf '0\n'
+    return
+  fi
+  find -L "$path" -type f -name "$pattern" -print 2>/dev/null | wc -l
+}
+
+count_camera_dumps() {
+  local path="$1"
+  if [[ ! -d "$path" ]]; then
+    printf '0\n'
+    return
+  fi
+  find -L "$path" -type f -path "*/$camera/*.npy" -print 2>/dev/null | wc -l
+}
+
+check_archive_tree() {
+  local label="$1" path="$2" expected="$3"
+  local actual
+  actual="$(count_files "$path" '*.npz')"
+  if [[ "$actual" -ne "$expected" ]]; then
+    printf 'INCOMPLETE: %s: %s / %s archives under %s\n' \
+      "$label" "$actual" "$expected" "$path" >&2
+    failed=1
+    return
+  fi
+  if find -L "$path" -type f -name '*.npz' -size 0 -print -quit 2>/dev/null | grep -q .; then
+    printf 'INVALID: %s contains an empty archive: %s\n' "$label" "$path" >&2
+    failed=1
+    return
+  fi
+  printf 'ok: %s (%s archives)\n' "$label" "$actual"
+  checked=$((checked + 1))
+}
+
+check_prepared_split() {
+  local split="$1" expected="$2"
+  local prepared_root="$data_root/relabeled/$detector/$camera"
+  local local_root="$prepared_root/local_cloud/$split"
+  local manifest="$local_root/manifest.jsonl"
+  local summary="$local_root/manifest.summary.json"
+  local manifest_count
+
+  check_archive_tree "$detector $camera $split local_cloud" "$local_root" "$expected"
+  check_archive_tree "$detector $camera $split object_cloud" \
+    "$prepared_root/object_cloud/$split" "$expected"
+  check_archive_tree "$detector $camera $split object_pooled" \
+    "$prepared_root/object_pooled/$split" "$expected"
+
+  if [[ ! -s "$manifest" ]]; then
+    printf 'MISSING: %s manifest: %s\n' "$split" "$manifest" >&2
+    failed=1
+  else
+    manifest_count="$(awk 'END { print NR + 0 }' "$manifest")"
+    if [[ "$manifest_count" -ne "$expected" ]]; then
+      printf 'INCOMPLETE: %s manifest: %s / %s records: %s\n' \
+        "$split" "$manifest_count" "$expected" "$manifest" >&2
+      failed=1
+    else
+      printf 'ok: %s manifest (%s records)\n' "$split" "$manifest_count"
+      checked=$((checked + 1))
+    fi
+  fi
+  check_file "$detector $camera $split manifest summary" "$summary"
 }
 
 check_dir 'GraspNet scenes' "$graspnet_root/scenes" 'scene_*'
@@ -171,7 +259,18 @@ else
 fi
 
 if [[ "$with_dumps" == true ]]; then
-  if find -L "$dump_root" -type f -name '*.npy' -print -quit 2>/dev/null | grep -q .; then
+  if [[ -n "$detector" ]]; then
+    dump_train="$(count_camera_dumps "$dump_root/$detector/train")"
+    dump_test="$(count_camera_dumps "$dump_root/$detector/test")"
+    if [[ "$dump_train" -eq 25600 && "$dump_test" -eq 23040 ]]; then
+      printf 'ok: frozen-detector dumps (%s train, %s test)\n' "$dump_train" "$dump_test"
+      checked=$((checked + 1))
+    else
+      printf 'INCOMPLETE: frozen-detector dumps for %s %s: train %s / 25600, test %s / 23040\n' \
+        "$detector" "$camera" "$dump_train" "$dump_test" >&2
+      failed=1
+    fi
+  elif find -L "$dump_root" -type f -name '*.npy' -print -quit 2>/dev/null | grep -q .; then
     printf 'ok: %s\n' 'frozen-detector dumps'
     checked=$((checked + 1))
   else
@@ -180,8 +279,13 @@ if [[ "$with_dumps" == true ]]; then
   fi
 fi
 
+if [[ "$with_features" == true ]]; then
+  check_prepared_split train 25600
+  check_prepared_split test 23040
+fi
+
 if [[ "$failed" -ne 0 ]]; then
   exit 1
 fi
 
-printf 'Downloaded asset check passed (%d checks).\n' "$checked"
+printf 'Asset check passed (%d checks).\n' "$checked"

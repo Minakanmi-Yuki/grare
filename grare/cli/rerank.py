@@ -675,7 +675,17 @@ def _merge_worker_summaries(
         "top1_changed_vs_base_count": counters["top1_changed_vs_base_count"],
         "candidate_count_per_file": numeric_stats(candidate_count_parts),
         "per_scene": per_scene,
-        "worker_summaries": worker_results,
+        "worker_summaries": [
+            {
+                "worker": int(result["worker"]),
+                "num_files": int(result["num_files"]),
+                "num_scenes": int(result["num_scenes"]),
+                "num_grasps_total": int(result["num_grasps_total"]),
+                "runtime_sec": float(result["runtime_sec"]),
+                "per_scene": result["per_scene"],
+            }
+            for result in sorted(worker_results, key=lambda item: int(item["worker"]))
+        ],
     }
     return summary
 

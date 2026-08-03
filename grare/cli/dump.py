@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate frozen-detector candidate dumps for a GraspNet split.
+"""Generate frozen-detector candidate dumps for one or both GraspNet splits.
 
 Drives an upstream detector checkpoint over the GraspNet train or test scenes
 and writes one raw ``(K, 17)`` GraspGroup array per frame. These dumps are the
@@ -12,6 +12,9 @@ first (see the README Installation section):
     ./scripts/verify_detector_extensions.sh
 
 Examples:
+    # Generate both published splits in order.
+    grare-dump --detector graspnet_baseline --camera realsense --split all
+
     # GraspNet-Baseline, RealSense test split.
     grare-dump --detector graspnet_baseline --camera realsense --split test
 
@@ -105,9 +108,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--camera", default="realsense", choices=CAMERAS)
     parser.add_argument(
         "--split",
-        default="test",
-        choices=SPLITS,
-        help="Generate dumps for GraspNet train or test scenes.",
+        default="all",
+        choices=(*SPLITS, "all"),
+        help="Generate dumps for GraspNet train, test, or both splits in order (default: all).",
     )
     parser.add_argument(
         "--ckpt",
@@ -296,15 +299,19 @@ def _validate_dataset_root(dataset_root: Path, *, split: str, camera: str) -> No
     )
 
 
-def main() -> int:
-    args = parse_args()
+def _run_split(args: argparse.Namespace) -> dict[str, object]:
     dataset_root, ckpt, repo_root, dump_root = _resolve_paths(args)
     wrapper = _build_wrapper(args, dataset_root, ckpt, repo_root)
 
     if args.dry_run:
         for command in wrapper.build_inference_commands(dump_root):
             print(" ".join(shlex.quote(str(part)) for part in command))
-        return 0
+        return {
+            "stage": "detector_dump_dry_run",
+            "detector": args.detector,
+            "camera": args.camera,
+            "split": args.split,
+        }
 
     if not ckpt.is_file():
         raise SystemExit(
@@ -351,9 +358,36 @@ def main() -> int:
         "finished_at": timestamp(),
         "runtime_sec": time.perf_counter() - started_perf,
     }
-    if args.save_summary:
-        write_json(args.save_summary, payload)
     print(json.dumps(payload, indent=2, ensure_ascii=False))
+    return payload
+
+
+def main() -> int:
+    args = parse_args()
+    splits = SPLITS if args.split == "all" else (args.split,)
+    started_perf = time.perf_counter()
+    results: list[dict[str, object]] = []
+
+    for split in splits:
+        split_args = argparse.Namespace(**{**vars(args), "split": split})
+        results.append(_run_split(split_args))
+
+    if len(results) == 1:
+        summary: dict[str, object] = results[0]
+    else:
+        summary = {
+            "stage": "detector_dump_all",
+            "detector": args.detector,
+            "camera": args.camera,
+            "splits": list(SPLITS),
+            "results": results,
+            "runtime_sec": time.perf_counter() - started_perf,
+            "finished_at": timestamp(),
+        }
+        print(json.dumps(summary, indent=2, ensure_ascii=False))
+
+    if args.save_summary:
+        write_json(args.save_summary, summary)
     return 0
 
 
