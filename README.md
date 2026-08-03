@@ -199,24 +199,65 @@ grare-run --config configs/gn_realsense.yaml
 This trains, re-ranks, and runs the official evaluation in order. Outputs are
 written to `$GRARE_OUTPUT_ROOT`.
 
+## Demo
+
+The demo follows the single-frame RGB-D workflow of the
+[GraspNet-Baseline demo](https://github.com/graspnet/graspnet-baseline/blob/main/demo.py).
+
+<!-- Temporary: the SBG and EG cells reuse GN previews until their matching demo checkpoints are available. -->
+<table>
+  <thead>
+    <tr>
+      <th></th>
+      <th>GraspNet-Baseline</th>
+      <th>Scale-Balanced-Grasp</th>
+      <th>EconomicGrasp</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>Detector</th>
+      <td><img src="assets/demo/demo_detector.png" alt="GraspNet-Baseline detector preview" width="280"></td>
+      <td><img src="assets/demo/demo_detector.png" alt="Scale-Balanced-Grasp detector preview placeholder" width="280"></td>
+      <td><img src="assets/demo/demo_detector.png" alt="EconomicGrasp detector preview placeholder" width="280"></td>
+    </tr>
+    <tr>
+      <th>GraRe</th>
+      <td><img src="assets/demo/demo_grare.png" alt="GraspNet-Baseline GraRe preview" width="280"></td>
+      <td><img src="assets/demo/demo_grare.png" alt="Scale-Balanced-Grasp GraRe preview placeholder" width="280"></td>
+      <td><img src="assets/demo/demo_grare.png" alt="EconomicGrasp GraRe preview placeholder" width="280"></td>
+    </tr>
+  </tbody>
+</table>
+
+After completing the corresponding workflow, run one GraspNet-1Billion frame:
+```bash
+source "$GRARE_ASSET_WORKSPACE/grare_paths.env"
+grare-demo --detector graspnet_baseline --camera realsense --scene 0100 --frame 0000
+```
+
 ## Results
 The following offline GraspNet-1Billion results use the official evaluation protocol.
-### Realsense
-| Frozen detector | Ranking | Seen | Similar | Novel | Average |
-| --- | --- | ---: | ---: | ---: | ---: |
-| GraspNet-Baseline | Detector | 47.83 | 42.79 | 16.94 | 35.85 |
-| GraspNet-Baseline | **GraRe** | **64.48** | **58.78** | **25.10** | **49.45** |
-| Scale-Balanced-Grasp | Detector | 62.27 | 56.92 | 23.80 | 47.66 |
-| Scale-Balanced-Grasp | **GraRe** | **68.76** | **62.64** | **27.51** | **52.97** |
-| EconomicGrasp | Detector | 69.30 | 61.50 | 25.28 | 52.02 |
-| EconomicGrasp | **GraRe** | **75.12** | **64.39** | **28.34** | **55.95** |
+| Frozen detector | Ranking | Camera | Seen | Similar | Novel | Average |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| GraspNet-Baseline | Detector | RealSense | 47.83 | 42.79 | 16.94 | 35.85 |
+| GraspNet-Baseline | **GraRe** | RealSense | **64.48** | **58.78** | **25.10** | **49.45** |
+| Scale-Balanced-Grasp | Detector | RealSense | 62.27 | 56.92 | 23.80 | 47.66 |
+| Scale-Balanced-Grasp | **GraRe** | RealSense | **68.76** | **62.64** | **27.51** | **52.97** |
+| EconomicGrasp | Detector | RealSense | 69.30 | 61.50 | 25.28 | 52.02 |
+| EconomicGrasp | **GraRe** | RealSense | **75.12** | **64.39** | **28.34** | **55.95** |
+| GraspNet-Baseline | Detector | Kinect | 41.97 | 37.56 | 12.24 | 30.59 |
+| GraspNet-Baseline | **GraRe** | Kinect | **53.94** | **46.39** | **16.04** | **38.79** |
+| EconomicGrasp | Detector | Kinect | 63.75 | 52.43 | 19.61 | 45.26 |
+| EconomicGrasp | **GraRe** | Kinect | **69.90** | **58.00** | **22.04** | **49.98** |
 
-### Kinect
-| Frozen detector | Ranking | Seen | Similar | Novel | Average |
-| --- | --- | ---: | ---: | ---: | ---: |
-| GraspNet-Baseline | Detector | 41.97 | 37.56 | 12.24 | 30.59 |
-| GraspNet-Baseline | **GraRe** | **53.94** | **46.39** | **16.04** | **38.79** |
-| Scale-Balanced-Grasp | Detector | — | — | — | — |
-| Scale-Balanced-Grasp | **GraRe** | **—** | **—** | **—** | **—** |
-| EconomicGrasp | Detector | 63.75 | 52.43 | 19.61 | 45.26 |
-| EconomicGrasp | **GraRe** | **69.90** | **58.00** | **22.04** | **49.98** |
+## Computational Cost
+
+Training was performed on a system with one NVIDIA GeForce RTX 5090 GPU
+(32 GiB VRAM) and an Intel Xeon Platinum 8470Q CPU.
+
+| Frozen detector | Ranking | Camera | Time | VRAM |
+| --- | --- | --- | ---: | ---: |
+| GraspNet-Baseline | GraRe | RealSense | 1 h 12 min | TBD |
+| GraspNet-Baseline | GraRe | Kinect | 1 h 17 min | TBD |
+| Scale-Balanced-Grasp | GraRe | RealSense | 58 min | TBD |

@@ -8,6 +8,7 @@ __all__ = [
     "AnalyticLabelConfig",
     "AnalyticLabeler",
     "BatchAnalyticRelabeler",
+    "OnlineFeatureExtractor",
     "ArchiveRelabeledCandidateDataset",
     "PackedRelabeledCandidateDataset",
     "RelabeledCandidateDataset",
@@ -30,6 +31,7 @@ _SYMBOL_TO_MODULE = {
     "AnalyticLabelConfig": "analytic_labeler",
     "AnalyticLabeler": "analytic_labeler",
     "BatchAnalyticRelabeler": "scene_labeling",
+    "OnlineFeatureExtractor": "scene_labeling",
     "ArchiveRelabeledCandidateDataset": "dataset_builder",
     "PackedRelabeledCandidateDataset": "dataset_builder",
     "RelabeledCandidateDataset": "dataset_builder",
@@ -84,4 +86,4 @@ if TYPE_CHECKING:
         summarize_manifest_records,
         validate_manifest_coverage,
     )
-    from .scene_labeling import BatchAnalyticRelabeler, SceneLabelingConfig
+    from .scene_labeling import BatchAnalyticRelabeler, OnlineFeatureExtractor, SceneLabelingConfig

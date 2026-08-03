@@ -1271,6 +1271,49 @@ class _BaseLabelBackend:
         raise NotImplementedError
 
 
+class OnlineFeatureExtractor(_BaseLabelBackend):
+    """Extract GraRe inference features from an arbitrary calibrated RGB-D frame.
+
+    This deliberately reuses the local-cloud sampler and SAM object-cloud
+    implementation used by the GraspNet preparation path, but it does not
+    load GraspNet meshes, annotations, or analytical labels.  It is therefore
+    suitable for demos and deployment-style inference on a single RGB-D frame.
+    """
+
+    def extract(
+        self,
+        grasp_group_array: np.ndarray,
+        *,
+        observed_points: np.ndarray,
+        points_grid: np.ndarray,
+        valid_grid: np.ndarray,
+        intrinsics: np.ndarray,
+        rgb_image: np.ndarray,
+    ) -> dict[str, np.ndarray]:
+        grasp_group_array = np.asarray(grasp_group_array, dtype=np.float32)
+        if grasp_group_array.ndim != 2:
+            raise ValueError("grasp_group_array must have rank 2")
+        observed_points = np.asarray(observed_points, dtype=np.float32)
+        local_cloud_tree = cKDTree(observed_points) if len(observed_points) else None
+        local_cloud, cloud_mask = self._extract_local_cloud(
+            grasp_group_array,
+            observed_points=observed_points,
+            local_cloud_tree=local_cloud_tree,
+        )
+        object_cloud = self._extract_object_cloud(
+            grasp_group_array,
+            points_grid=np.asarray(points_grid, dtype=np.float32),
+            valid_grid=np.asarray(valid_grid, dtype=np.bool_),
+            intrinsics=np.asarray(intrinsics, dtype=np.float32),
+            rgb_image=np.asarray(rgb_image, dtype=np.uint8),
+        )
+        return {
+            "local_cloud": local_cloud,
+            "cloud_mask": cloud_mask,
+            "object_cloud": object_cloud,
+        }
+
+
 class _GraspNetLabelBackend(_BaseLabelBackend):
     max_width = 0.10
     collision_detection = staticmethod(graspnet_collision_detection)

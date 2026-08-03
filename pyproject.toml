@@ -34,6 +34,7 @@ test = ["pytest>=7"]
 grare-run = "grare.cli.run:main"
 grare-dump = "grare.cli.dump:main"
 grare-feature = "grare.cli.feature:main"
+grare-demo = "grare.cli.demo:main"
 grare-prepare = "grare.cli.prepare:main"
 grare-manifest = "grare.cli.manifest:main"
 grare-precompute-object = "grare.cli.precompute_object:main"
