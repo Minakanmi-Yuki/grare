@@ -21,7 +21,7 @@ import tempfile
 import time
 from typing import Any, Iterable
 
-from huggingface_hub import HfApi, hf_hub_download
+from huggingface_hub import CommitOperationAdd, HfApi, hf_hub_download
 from huggingface_hub.errors import EntryNotFoundError
 
 from grare.config import load_config
@@ -48,6 +48,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=5,
         help="Scenes per tar shard (default: 5).",
+    )
+    features.add_argument(
+        "--uploads-per-commit",
+        type=int,
+        default=5,
+        help="Tar shards to send in each Hugging Face commit (default: 5).",
     )
     features.add_argument("--dry-run", action="store_true")
 
@@ -188,6 +194,35 @@ def _upload_file(
     }
 
 
+def _upload_files(
+    *,
+    api: HfApi,
+    sources: list[tuple[Path, str]],
+    repo_id: str,
+    repo_type: str,
+    token: str,
+) -> list[dict[str, Any]]:
+    """Upload a small batch of completed tar shards in one Hub commit."""
+    paths = [path_in_repo for _, path_in_repo in sources]
+    _retry_hub(
+        lambda: api.create_commit(
+            repo_id=repo_id,
+            repo_type=repo_type,
+            token=token,
+            operations=[
+                CommitOperationAdd(path_in_repo=path_in_repo, path_or_fileobj=str(source))
+                for source, path_in_repo in sources
+            ],
+            commit_message=f"Add {len(sources)} GraRe asset shard(s): {paths[0]}",
+        ),
+        f"upload {len(sources)} dataset shard(s) to {repo_id}",
+    )
+    return [
+        {"path": path_in_repo, "size": source.stat().st_size, "sha256": _sha256(source)}
+        for source, path_in_repo in sources
+    ]
+
+
 def _scene_groups(scenes: list[Path], size: int) -> Iterable[list[Path]]:
     for offset in range(0, len(scenes), size):
         yield scenes[offset : offset + size]
@@ -267,6 +302,8 @@ def _publish_features(args: argparse.Namespace) -> int:
         raise SystemExit("--data-root is required or GRARE_DATA_ROOT must be set.")
     if args.scenes_per_shard < 1:
         raise SystemExit("--scenes-per-shard must be positive.")
+    if args.uploads_per_commit < 1:
+        raise SystemExit("--uploads-per-commit must be positive.")
     data_root = Path(args.data_root).resolve()
     source_root = data_root / "relabeled" / args.detector / args.camera
     if not source_root.is_dir():
@@ -278,125 +315,88 @@ def _publish_features(args: argparse.Namespace) -> int:
         index, detector=args.detector, camera=args.camera, data_root=data_root
     )
     changed = False
-    feature_set["complete"] = False
     for stage in FEATURE_STAGES:
         for split in SPLITS:
             stage_root = source_root / stage / split
             scenes = sorted(path for path in stage_root.glob("scene_*") if path.is_dir())
             if not scenes:
                 raise RuntimeError(f"no scenes found under {stage_root}")
-            for group in _scene_groups(scenes, args.scenes_per_shard):
-                first, last = group[0].name.removeprefix("scene_"), group[-1].name.removeprefix("scene_")
-                remote_path = (
-                    f"shards/v1/{args.detector}/{args.camera}/{stage}/{split}/"
-                    f"scenes-{first}-{last}.tar"
-                )
-                scene_names = [scene.name for scene in group]
-                previous = _published_shard(
-                    feature_set, path=remote_path, scenes=scene_names
-                )
-                if previous is not None:
-                    print(
-                        json.dumps(
-                            {"stage": "already_published", "path": remote_path},
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
+            # Keep only one small batch of temporary tars on disk.  This is
+            # important for the multi-hundred-GB prepared feature trees.
+            with tempfile.TemporaryDirectory(prefix="grare-hf-") as temp_dir:
+                pending: list[tuple[Path, str, list[str]]] = []
+
+                def flush_pending() -> None:
+                    nonlocal changed
+                    if not pending:
+                        return
+                    sources = [(path, remote_path) for path, remote_path, _ in pending]
+                    artifacts = (
+                        _upload_files(
+                            api=api,
+                            sources=sources,
+                            repo_id=args.repo_id,
+                            repo_type="dataset",
+                            token=token,
+                        )
+                        if not args.dry_run
+                        else [
+                            {
+                                "path": remote_path,
+                                "size": path.stat().st_size,
+                                "sha256": _sha256(path),
+                            }
+                            for path, remote_path, _ in pending
+                        ]
                     )
-                    continue
-                print(json.dumps({"stage": "package", "path": remote_path}, ensure_ascii=False), flush=True)
-                with tempfile.TemporaryDirectory(prefix="grare-hf-") as temp_dir:
-                    shard_path = Path(temp_dir) / "shard.tar"
+                    for (_, _, scene_names), artifact in zip(pending, artifacts, strict=True):
+                        shard = {"stage": stage, "split": split, "scenes": scene_names, **artifact}
+                        changed = _upsert_shard(feature_set, shard) or changed
+                    pending.clear()
+
+                for group in _scene_groups(scenes, args.scenes_per_shard):
+                    first = group[0].name.removeprefix("scene_")
+                    last = group[-1].name.removeprefix("scene_")
+                    remote_path = (
+                        f"shards/v1/{args.detector}/{args.camera}/{stage}/{split}/"
+                        f"scenes-{first}-{last}.tar"
+                    )
+                    scene_names = [scene.name for scene in group]
+                    if _published_shard(feature_set, path=remote_path, scenes=scene_names):
+                        print(
+                            json.dumps(
+                                {"stage": "already_published", "path": remote_path},
+                                ensure_ascii=False,
+                            ),
+                            flush=True,
+                        )
+                        continue
+                    print(json.dumps({"stage": "package", "path": remote_path}, ensure_ascii=False), flush=True)
+                    shard_path = Path(temp_dir) / f"{len(pending):03d}.tar"
                     _create_tar(
                         source_paths=_stage_scene_paths(stage_root, group),
                         data_root=data_root,
                         destination=shard_path,
                     )
-                    artifact = (
-                        _upload_file(
-                            api=api,
-                            source=shard_path,
-                            path_in_repo=remote_path,
-                            repo_id=args.repo_id,
-                            repo_type="dataset",
-                            token=token,
-                        )
-                        if not args.dry_run
-                        else {
-                            "path": remote_path,
-                            "size": shard_path.stat().st_size,
-                            "sha256": _sha256(shard_path),
-                        }
+                    pending.append((shard_path, remote_path, scene_names))
+                    if len(pending) == args.uploads_per_commit:
+                        flush_pending()
+
+                if stage == "local_cloud":
+                    manifests = sorted(
+                        path for path in stage_root.iterdir()
+                        if path.is_file() and path.name.startswith("manifest")
                     )
-                    shard = {
-                        "stage": stage,
-                        "split": split,
-                        "scenes": scene_names,
-                        **artifact,
-                    }
-                if _upsert_shard(feature_set, shard):
-                    changed = True
-                    if not args.dry_run:
-                        _upload_index(
-                            api=api,
-                            repo_id=args.repo_id,
-                            repo_type="dataset",
-                            token=token,
-                            index=index,
-                        )
-            if stage == "local_cloud":
-                manifests = sorted(
-                    path for path in stage_root.iterdir() if path.is_file() and path.name.startswith("manifest")
-                )
-                if not manifests:
-                    raise RuntimeError(f"missing manifest files under {stage_root}")
-                remote_path = (
-                    f"shards/v1/{args.detector}/{args.camera}/{stage}/{split}/manifests.tar"
-                )
-                if _published_shard(feature_set, path=remote_path, scenes=[]):
-                    print(
-                        json.dumps(
-                            {"stage": "already_published", "path": remote_path},
-                            ensure_ascii=False,
-                        ),
-                        flush=True,
+                    if not manifests:
+                        raise RuntimeError(f"missing manifest files under {stage_root}")
+                    remote_path = (
+                        f"shards/v1/{args.detector}/{args.camera}/{stage}/{split}/manifests.tar"
                     )
-                    continue
-                with tempfile.TemporaryDirectory(prefix="grare-hf-") as temp_dir:
-                    shard_path = Path(temp_dir) / "manifests.tar"
-                    _create_tar(source_paths=manifests, data_root=data_root, destination=shard_path)
-                    artifact = (
-                        _upload_file(
-                            api=api,
-                            source=shard_path,
-                            path_in_repo=remote_path,
-                            repo_id=args.repo_id,
-                            repo_type="dataset",
-                            token=token,
-                        )
-                        if not args.dry_run
-                        else {
-                            "path": remote_path,
-                            "size": shard_path.stat().st_size,
-                            "sha256": _sha256(shard_path),
-                        }
-                    )
-                    shard = {
-                        "stage": stage,
-                        "split": split,
-                        "scenes": [],
-                        **artifact,
-                    }
-                if _upsert_shard(feature_set, shard):
-                    changed = True
-                    if not args.dry_run:
-                        _upload_index(
-                            api=api,
-                            repo_id=args.repo_id,
-                            repo_type="dataset",
-                            token=token,
-                            index=index,
-                        )
+                    if not _published_shard(feature_set, path=remote_path, scenes=[]):
+                        shard_path = Path(temp_dir) / f"{len(pending):03d}-manifests.tar"
+                        _create_tar(source_paths=manifests, data_root=data_root, destination=shard_path)
+                        pending.append((shard_path, remote_path, []))
+                flush_pending()
     if feature_set.get("complete") is not True:
         feature_set["complete"] = True
         changed = True

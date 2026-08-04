@@ -11,6 +11,7 @@ with the same model-free GraspNet implementation used by the GN adapter.
 from __future__ import annotations
 
 import argparse
+import collections
 import collections.abc
 import json
 import os
@@ -95,6 +96,8 @@ def _install_pytorch3d_compat() -> None:
     ops_utils = types.ModuleType("pytorch3d.ops.utils")
     transforms = types.ModuleType("pytorch3d.transforms")
 
+    KNN = collections.namedtuple("KNN", ("dists", "idx", "knn"))
+
     def knn_points(p1, p2, K=1, **_kwargs):
         if p1.ndim != 3 or p2.ndim != 3:
             raise ValueError("knn_points expects (B, N, D) tensors")
@@ -106,7 +109,9 @@ def _install_pytorch3d_compat() -> None:
             2,
             indices[..., None].expand(-1, -1, -1, p2.shape[-1]),
         )
-        return types.SimpleNamespace(dists=distances, idx=indices, knn=neighbours)
+        # PyTorch3D's KNN result supports both attribute access and tuple
+        # unpacking; HGGD uses both forms in its published utilities.
+        return KNN(distances, indices, neighbours)
 
     def masked_gather(points, indices):
         expanded = points[:, None].expand(-1, indices.shape[1], -1, -1)
