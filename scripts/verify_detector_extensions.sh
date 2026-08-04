@@ -51,14 +51,16 @@ def reset_modules() -> None:
             sys.modules.pop(name, None)
 
 
-def import_with_paths(label: str, paths: list[Path], modules: list[str]) -> None:
+def import_with_paths(label: str, paths: list[Path], modules: list[str]) -> dict[str, object]:
     reset_modules()
     original_path = list(sys.path)
     sys.path[:0] = [str(path) for path in paths]
     try:
+        loaded = {}
         for module in modules:
-            importlib.import_module(module)
+            loaded[module] = importlib.import_module(module)
             print("ok", label, module)
+        return loaded
     finally:
         sys.path = original_path
 
@@ -73,6 +75,19 @@ import_with_paths(
     [root / "external/Scale-Balanced-Grasp/pointnet2", root / "external/graspnet-baseline/knn"],
     ["pointnet2_utils", "knn_modules"],
 )
+import_with_paths(
+    "generalizing_grasp",
+    [root / "external/Generalizing-Grasp/pointnet2", root / "external/Generalizing-Grasp/knn"],
+    ["pointnet2_utils", "knn_modules"],
+)
+pointnet2_ext = importlib.import_module("pointnet2._ext")
+if not hasattr(pointnet2_ext, "dynamic_cylinder_query"):
+    raise SystemExit(
+        "Generalizing-Grasp PointNet2 is not the active pointnet2._ext. "
+        "Re-run ./scripts/build_detector_extensions.sh so its compatible "
+        "dynamic-cylinder extension is installed last."
+    )
+print("ok generalizing_grasp pointnet2._ext dynamic_cylinder_query")
 if not skip_economic:
     import_with_paths(
         "economicgrasp",

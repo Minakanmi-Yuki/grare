@@ -13,8 +13,14 @@ from grare.candidates import (
 from grare.detectors import (
     EconomicGraspConfig,
     EconomicGraspWrapper,
+    GeneralizingGraspConfig,
+    GeneralizingGraspWrapper,
     GraspNetBaselineConfig,
     GraspNetBaselineWrapper,
+    HGGDConfig,
+    HGGDWrapper,
+    RNGNetConfig,
+    RNGNetWrapper,
     ScaleBalancedGraspConfig,
     ScaleBalancedGraspWrapper,
 )
@@ -40,6 +46,24 @@ _CASES = [
         EconomicGraspConfig,
         "scripts/detectors/run_economicgrasp_split.py",
     ),
+    (
+        "hggd",
+        HGGDWrapper,
+        HGGDConfig,
+        "scripts/detectors/run_hggd_split.py",
+    ),
+    (
+        "rngnet",
+        RNGNetWrapper,
+        RNGNetConfig,
+        "scripts/detectors/run_rngnet_split.py",
+    ),
+    (
+        "generalizing_grasp",
+        GeneralizingGraspWrapper,
+        GeneralizingGraspConfig,
+        "scripts/detectors/run_generalizing_grasp_split.py",
+    ),
 ]
 
 
@@ -64,6 +88,9 @@ def test_wrapper_targets_an_adapter_that_exists(
     assert "--dataset_root" in command
     assert "--checkpoint_path" in command
     assert str(tmp_path / name / "test") in command
+    if name in {"hggd", "rngnet", "generalizing_grasp"}:
+        assert command[command.index("--data_workers") + 1] == "2"
+        assert command[command.index("--prefetch-factor") + 1] == "2"
 
 
 @pytest.mark.parametrize("name,wrapper_cls,config_cls,adapter", _CASES)

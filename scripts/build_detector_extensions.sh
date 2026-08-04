@@ -8,7 +8,8 @@ Usage: ./scripts/build_detector_extensions.sh [--skip-economic]
 
 Builds the PointNet2 and KNN operators for GraspNet-Baseline and
 Scale-Balanced-Grasp, plus MinkowskiEngine, PointNet2, and KNN for
-EconomicGrasp. Clone the three pinned detector sources into external/ first.
+EconomicGrasp and the extended PointNet2/KNN operators for
+Generalizing-Grasp. Clone the detector sources into external/ first.
 
 Environment variables:
   CUDA_HOME              CUDA toolkit root (default: /usr/local/cuda)
@@ -99,6 +100,8 @@ apply_graspnet_baseline_dump_patch() {
 require_dir "$project_root/external/graspnet-baseline/pointnet2"
 require_dir "$project_root/external/graspnet-baseline/knn"
 require_dir "$project_root/external/Scale-Balanced-Grasp/pointnet2"
+require_dir "$project_root/external/Generalizing-Grasp/pointnet2"
+require_dir "$project_root/external/Generalizing-Grasp/knn"
 if [[ "$skip_economic" == false ]]; then
   require_dir "$project_root/external/EconomicGrasp/libs/MinkowskiEngine"
   require_dir "$project_root/external/EconomicGrasp/libs/pointnet2"
@@ -147,5 +150,12 @@ if [[ "$skip_economic" == false ]]; then
   run_setup_install 'EconomicGrasp PointNet2' "$project_root/external/EconomicGrasp/libs/pointnet2"
   run_setup_install 'EconomicGrasp KNN' "$project_root/external/EconomicGrasp/libs/knn"
 fi
+
+# Every upstream PointNet2 setup publishes the same ``pointnet2._ext`` name.
+# Generalizing-Grasp adds dynamic-cylinder kernels while retaining the common
+# operators, so install that compatible superset last rather than letting an
+# earlier detector overwrite it.
+run_setup_install 'Generalizing-Grasp PointNet2' "$project_root/external/Generalizing-Grasp/pointnet2"
+run_setup_install 'Generalizing-Grasp KNN' "$project_root/external/Generalizing-Grasp/knn"
 
 printf '%s\n' 'Detector extension build complete.'

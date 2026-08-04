@@ -15,7 +15,14 @@ import subprocess
 import sys
 
 
-DETECTORS = ("graspnet_baseline", "scale_balanced_grasp", "economicgrasp")
+DETECTORS = (
+    "graspnet_baseline",
+    "scale_balanced_grasp",
+    "economicgrasp",
+    "hggd",
+    "rngnet",
+    "generalizing_grasp",
+)
 CAMERAS = ("realsense", "kinect")
 SPLITS = ("train", "test")
 

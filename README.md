@@ -57,7 +57,7 @@ python -m pip install --upgrade pip
 python -m pip install \
   --index-url https://download.pytorch.org/whl/cu130 \
   torch==2.12.1+cu130 torchvision==0.27.1+cu130
-python -m pip install -e '.[test]'
+python -m pip install -e '.[test,detectors]'
 ```
 
 Verify the installation:
@@ -98,6 +98,9 @@ mkdir -p external
 git clone https://github.com/graspnet/graspnet-baseline external/graspnet-baseline
 git clone https://github.com/mahaoxiang822/Scale-Balanced-Grasp external/Scale-Balanced-Grasp
 git clone https://github.com/iSEE-Laboratory/EconomicGrasp external/EconomicGrasp
+git clone https://github.com/THU-VCLab/HGGD external/HGGD
+git clone https://github.com/THU-VCLab/RNGNet external/RNGNet
+git clone https://github.com/mahaoxiang822/Generalizing-Grasp external/Generalizing-Grasp
 ```
 
 Build the CUDA extensions and verify them:
@@ -129,6 +132,9 @@ Download assets from official source:
 | GN checkpoints | [GraspNet-Baseline](https://github.com/graspnet/graspnet-baseline#training-and-testing), `checkpoint-rs.tar` and `checkpoint-kn.tar` | `$GRARE_DETECTOR_CKPT_ROOT/graspnet_baseline/` |
 | SBG checkpoint | [Scale-Balanced-Grasp](https://github.com/mahaoxiang822/Scale-Balanced-Grasp#test), the `log_full_model/checkpoint.tar` in its Drive folder | `$GRARE_DETECTOR_CKPT_ROOT/scale_balanced_grasp/log_full_model/` |
 | EG checkpoints | [EconomicGrasp v1 release](https://github.com/iSEE-Laboratory/EconomicGrasp/releases/tag/v1), `economicgrasp_realsense.tar` and `economicgrasp_kinect.tar` | `$GRARE_DETECTOR_CKPT_ROOT/economicgrasp/` |
+| HGGD checkpoints | [HGGD Tsinghua Cloud](https://cloud.tsinghua.edu.cn/d/e3edfc2c8b114513b7eb/), the RealSense and Kinect checkpoints | `$GRARE_DETECTOR_CKPT_ROOT/hggd/realsense_checkpoint`, `$GRARE_DETECTOR_CKPT_ROOT/hggd/kinect_checkpoint` |
+| RNGNet checkpoints | bundled as `realsense.pth` and `kinect.pth` in the official [RNGNet repository](https://github.com/THU-VCLab/RNGNet) | `$GRARE_DETECTOR_CKPT_ROOT/rngnet/` |
+| Generalizing-Grasp checkpoint | official [Google Drive checkpoint](https://drive.google.com/file/d/1WJj54l7MxFO1kgXoXA9tF6FCfB2okKr3/view) | `$GRARE_DETECTOR_CKPT_ROOT/generalizing_grasp/checkpoint.tar` |
 
 The downloaded assets should be arranged as follows:
 
@@ -149,9 +155,17 @@ $GRARE_ASSET_WORKSPACE/
 │   │   └── checkpoint-kn.tar                       GN Kinect
 │   ├── scale_balanced_grasp/
 │   │   └── log_full_model/checkpoint.tar           SBG RealSense
-│   └── economicgrasp/
-│       ├── economicgrasp_realsense.tar             EG RealSense
-│       └── economicgrasp_kinect.tar                EG Kinect
+│   ├── economicgrasp/
+│   │   ├── economicgrasp_realsense.tar             EG RealSense
+│   │   └── economicgrasp_kinect.tar                EG Kinect
+│   ├── hggd/
+│   │   ├── realsense_checkpoint                    HGGD RealSense
+│   │   └── kinect_checkpoint                       HGGD Kinect
+│   ├── rngnet/
+│   │   ├── realsense.pth                           RNGNet RealSense
+│   │   └── kinect.pth                              RNGNet Kinect
+│   └── generalizing_grasp/
+│       └── checkpoint.tar                          Generalizing-Grasp RealSense
 └── backbones/                                     frozen feature backbones
     ├── mobile_sam.pt
     └── point_mae_pretrain.pth
@@ -200,6 +214,11 @@ Select the configuration matching the prepared detector and camera:
 | `configs/sbg_realsense.yaml` | Scale-Balanced-Grasp | RealSense |
 | `configs/eg_realsense.yaml` | EconomicGrasp | RealSense |
 | `configs/eg_kinect.yaml` | EconomicGrasp | Kinect |
+| `configs/hggd_realsense.yaml` | HGGD | RealSense |
+| `configs/hggd_kinect.yaml` | HGGD | Kinect |
+| `configs/rngnet_realsense.yaml` | RNGNet | RealSense |
+| `configs/rngnet_kinect.yaml` | RNGNet | Kinect |
+| `configs/generalizing_grasp_realsense.yaml` | Generalizing-Grasp | RealSense |
 
 For example:
 ```bash
@@ -208,8 +227,16 @@ grare-run --config configs/gn_realsense.yaml
 This trains, re-ranks, and runs the official evaluation in order. Outputs are
 written to `$GRARE_OUTPUT_ROOT`.
 
-To use a published trained model without retraining, download the checkpoint
-selected by the same configuration:
+HGGD and RNGNet publish RealSense and Kinect weights. Generalizing-Grasp
+publishes a RealSense checkpoint; its upstream evaluator uses fused scene
+clouds, while GraRe's adapter runs the released frozen model per original
+RGB-D frame so that it follows the same preparation and evaluation contract.
+Only the five configurations in the Results table below are released numerical
+reproductions; newly added detectors require their own completed evaluation
+before reporting metrics.
+
+Published GraRe checkpoints are currently available only for those five
+released configurations. To use one without retraining:
 
 ```bash
 grare-fetch checkpoint --config configs/gn_realsense.yaml
@@ -246,7 +273,8 @@ The demo follows the single-frame RGB-D workflow of the
   </tbody>
 </table>
 
-After completing the corresponding workflow, run one GraspNet-1Billion frame:
+After completing the corresponding workflow, run one GraspNet-1Billion frame
+(the detector can be any supported selection with a matching configuration):
 ```bash
 source "$GRARE_ASSET_WORKSPACE/grare_paths.env"
 grare-demo --detector graspnet_baseline --camera realsense --scene 0100 --frame 0000

@@ -7,9 +7,10 @@ usage() {
 Usage: ./scripts/check_downloaded_assets.sh [options]
 
 Verify GraspNet-1Billion, the MobileSAM and Point-MAE weights, and the five
-published detector checkpoints. --with-dumps additionally verifies detector
-outputs. --with-features verifies the complete GraRe feature tree for one
-detector-camera setting.
+released detector checkpoints. Select HGGD, RNGNet, or Generalizing-Grasp
+explicitly with --detector to verify its optional checkpoint. --with-dumps
+additionally verifies detector outputs. --with-features verifies the complete
+GraRe feature tree for one detector-camera setting.
 
 Options:
   --workspace DIR                  Asset workspace (default: $GRARE_ASSET_WORKSPACE or ./grare-assets)
@@ -237,12 +238,31 @@ check_selected_checkpoint() {
     economicgrasp:kinect)
       check_file 'EG Kinect checkpoint' "$detector_checkpoint_root/economicgrasp/economicgrasp_kinect.tar"
       ;;
+    hggd:realsense)
+      check_file 'HGGD RealSense checkpoint' "$detector_checkpoint_root/hggd/realsense_checkpoint"
+      ;;
+    hggd:kinect)
+      check_file 'HGGD Kinect checkpoint' "$detector_checkpoint_root/hggd/kinect_checkpoint"
+      ;;
+    rngnet:realsense)
+      check_file 'RNGNet RealSense checkpoint' "$detector_checkpoint_root/rngnet/realsense.pth"
+      ;;
+    rngnet:kinect)
+      check_file 'RNGNet Kinect checkpoint' "$detector_checkpoint_root/rngnet/kinect.pth"
+      ;;
+    generalizing_grasp:realsense)
+      check_file 'Generalizing-Grasp RealSense checkpoint' "$detector_checkpoint_root/generalizing_grasp/checkpoint.tar"
+      ;;
+    generalizing_grasp:kinect)
+      printf 'UNSUPPORTED: Generalizing-Grasp publishes a RealSense checkpoint only.\n' >&2
+      failed=1
+      ;;
     scale_balanced_grasp:kinect)
       printf 'UNSUPPORTED: Scale-Balanced-Grasp has no published Kinect checkpoint.\n' >&2
       failed=1
       ;;
     *)
-      printf 'INVALID: --detector must be graspnet_baseline, scale_balanced_grasp, or economicgrasp; --camera must be realsense or kinect.\n' >&2
+      printf 'INVALID: unsupported --detector/--camera selection.\n' >&2
       failed=1
       ;;
   esac

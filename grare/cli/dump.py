@@ -38,10 +38,16 @@ from grare.detectors.economicgrasp_wrapper import (
     EconomicGraspConfig,
     EconomicGraspWrapper,
 )
+from grare.detectors.generalizing_grasp_wrapper import (
+    GeneralizingGraspConfig,
+    GeneralizingGraspWrapper,
+)
 from grare.detectors.graspnet_baseline_wrapper import (
     GraspNetBaselineConfig,
     GraspNetBaselineWrapper,
 )
+from grare.detectors.hggd_wrapper import HGGDConfig, HGGDWrapper
+from grare.detectors.rngnet_wrapper import RNGNetConfig, RNGNetWrapper
 from grare.detectors.scale_balanced_grasp_wrapper import (
     ScaleBalancedGraspConfig,
     ScaleBalancedGraspWrapper,
@@ -55,7 +61,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 configure_thread_pools()
 
-DETECTORS = ("graspnet_baseline", "scale_balanced_grasp", "economicgrasp")
+DETECTORS = (
+    "graspnet_baseline",
+    "scale_balanced_grasp",
+    "economicgrasp",
+    "hggd",
+    "rngnet",
+    "generalizing_grasp",
+)
 CAMERAS = ("realsense", "kinect")
 SPLITS = ("train", "test")
 
@@ -66,10 +79,15 @@ DEFAULT_CKPT_BY_CAMERA = {
         "graspnet_baseline": "graspnet_baseline/checkpoint-rs.tar",
         "scale_balanced_grasp": "scale_balanced_grasp/log_full_model/checkpoint.tar",
         "economicgrasp": "economicgrasp/economicgrasp_realsense.tar",
+        "hggd": "hggd/realsense_checkpoint",
+        "rngnet": "rngnet/realsense.pth",
+        "generalizing_grasp": "generalizing_grasp/checkpoint.tar",
     },
     "kinect": {
         "graspnet_baseline": "graspnet_baseline/checkpoint-kn.tar",
         "economicgrasp": "economicgrasp/economicgrasp_kinect.tar",
+        "hggd": "hggd/kinect_checkpoint",
+        "rngnet": "rngnet/kinect.pth",
     },
 }
 
@@ -201,8 +219,7 @@ def _resolve_paths(args: argparse.Namespace) -> tuple[Path, Path, Path, Path]:
         if rel_ckpt is None:
             raise SystemExit(
                 f"no published checkpoint for detector={args.detector!r}, camera={args.camera!r}. "
-                "Scale-Balanced-Grasp publishes a RealSense checkpoint only; "
-                "pass --ckpt explicitly to use another one."
+                "Pass --ckpt explicitly to use a custom checkpoint."
             )
         ckpt = Path(ckpt_root_raw).expanduser() / rel_ckpt
 
@@ -216,11 +233,6 @@ def _build_wrapper(args: argparse.Namespace, dataset_root: Path, ckpt: Path, rep
         raise SystemExit("--index-shard-count must be >= 1")
     if not 0 <= args.index_shard_id < args.index_shard_count:
         raise SystemExit("--index-shard-id must satisfy 0 <= id < count")
-    if args.detector == "economicgrasp" and args.index_shard_count > 1:
-        raise SystemExit(
-            "index sharding is supported for graspnet_baseline and scale_balanced_grasp only"
-        )
-
     persistent_workers = not args.no_persistent_workers
     overrides: dict[str, float] = {}
     if args.collision_thresh is not None:
@@ -270,6 +282,39 @@ def _build_wrapper(args: argparse.Namespace, dataset_root: Path, ckpt: Path, rep
             **common_for(ScaleBalancedGraspConfig),
         )
         return ScaleBalancedGraspWrapper(config, **wrapper_kwargs)
+
+    if args.detector == "hggd":
+        config = HGGDConfig(
+            batch_size=_configured(args.batch_size, HGGDConfig, "batch_size"),
+            data_workers=_configured(args.data_workers, HGGDConfig, "data_workers"),
+            postprocess_workers=_configured(args.postprocess_workers, HGGDConfig, "postprocess_workers"),
+            index_shard_count=args.index_shard_count,
+            index_shard_id=args.index_shard_id,
+            **common_for(HGGDConfig),
+        )
+        return HGGDWrapper(config, **wrapper_kwargs)
+
+    if args.detector == "rngnet":
+        config = RNGNetConfig(
+            batch_size=_configured(args.batch_size, RNGNetConfig, "batch_size"),
+            data_workers=_configured(args.data_workers, RNGNetConfig, "data_workers"),
+            postprocess_workers=_configured(args.postprocess_workers, RNGNetConfig, "postprocess_workers"),
+            index_shard_count=args.index_shard_count,
+            index_shard_id=args.index_shard_id,
+            **common_for(RNGNetConfig),
+        )
+        return RNGNetWrapper(config, **wrapper_kwargs)
+
+    if args.detector == "generalizing_grasp":
+        config = GeneralizingGraspConfig(
+            batch_size=_configured(args.batch_size, GeneralizingGraspConfig, "batch_size"),
+            data_workers=_configured(args.data_workers, GeneralizingGraspConfig, "data_workers"),
+            postprocess_workers=_configured(args.postprocess_workers, GeneralizingGraspConfig, "postprocess_workers"),
+            index_shard_count=args.index_shard_count,
+            index_shard_id=args.index_shard_id,
+            **common_for(GeneralizingGraspConfig),
+        )
+        return GeneralizingGraspWrapper(config, **wrapper_kwargs)
 
     config = EconomicGraspConfig(
         batch_size=_configured(args.batch_size, EconomicGraspConfig, "batch_size"),

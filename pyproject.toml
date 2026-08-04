@@ -28,6 +28,12 @@ prepare = [
     "timm>=0.9",
     "open3d>=0.18",
 ]
+detectors = [
+    # HGGD and the standalone RNGNet decoder use Numba; HGGD additionally
+    # imports scikit-image for its released heatmap decoder.
+    "numba>=0.60",
+    "scikit-image>=0.22",
+]
 hub = [
     "huggingface_hub>=0.26",
 ]

@@ -26,7 +26,14 @@ from grare.config import load_config
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_ROOT = PROJECT_ROOT / "configs"
-DETECTORS = ("graspnet_baseline", "scale_balanced_grasp", "economicgrasp")
+DETECTORS = (
+    "graspnet_baseline",
+    "scale_balanced_grasp",
+    "economicgrasp",
+    "hggd",
+    "rngnet",
+    "generalizing_grasp",
+)
 CAMERAS = ("realsense", "kinect")
 CONFIG_NAME_BY_SELECTION = {
     ("graspnet_baseline", "realsense"): "gn_realsense",
@@ -34,6 +41,11 @@ CONFIG_NAME_BY_SELECTION = {
     ("scale_balanced_grasp", "realsense"): "sbg_realsense",
     ("economicgrasp", "realsense"): "eg_realsense",
     ("economicgrasp", "kinect"): "eg_kinect",
+    ("hggd", "realsense"): "hggd_realsense",
+    ("hggd", "kinect"): "hggd_kinect",
+    ("rngnet", "realsense"): "rngnet_realsense",
+    ("rngnet", "kinect"): "rngnet_kinect",
+    ("generalizing_grasp", "realsense"): "generalizing_grasp_realsense",
 }
 
 
@@ -142,7 +154,7 @@ def _config_name_for(detector: str, camera: str) -> str:
         return name
     raise SystemExit(
         f"no GraRe configuration is available for detector={detector!r}, camera={camera!r}. "
-        "Scale-Balanced-Grasp currently supports RealSense only."
+        "Select a detector/camera pair listed in the Train and Evaluate table."
     )
 
 
