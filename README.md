@@ -254,18 +254,15 @@ grare-demo --detector graspnet_baseline --camera realsense --scene 0100 --frame 
 
 ## Results
 The following offline GraspNet-1Billion results use the official evaluation protocol.
-| Frozen detector | Ranking | Camera | Seen | Similar | Novel | Average |
-| --- | --- | --- | ---: | ---: | ---: | ---: |
-| GraspNet-Baseline | Detector | RealSense | 47.83 | 42.79 | 16.94 | 35.85 |
-| GraspNet-Baseline | **GraRe** | RealSense | **64.48** | **58.78** | **25.10** | **49.45** |
-| Scale-Balanced-Grasp | Detector | RealSense | 62.27 | 56.92 | 23.80 | 47.66 |
-| Scale-Balanced-Grasp | **GraRe** | RealSense | **68.76** | **62.64** | **27.51** | **52.97** |
-| EconomicGrasp | Detector | RealSense | 69.30 | 61.50 | 25.28 | 52.02 |
-| EconomicGrasp | **GraRe** | RealSense | **74.90** | **64.51** | **28.16** | **55.85** |
-| GraspNet-Baseline | Detector | Kinect | 41.97 | 37.56 | 12.24 | 30.59 |
-| GraspNet-Baseline | **GraRe** | Kinect | **53.94** | **46.39** | **16.04** | **38.79** |
-| EconomicGrasp | Detector | Kinect | 63.75 | 52.43 | 19.61 | 45.26 |
-| EconomicGrasp | **GraRe** | Kinect | **69.90** | **58.00** | **22.04** | **49.98** |
+Each metric is reported as `Detector / GraRe`.
+
+| Frozen detector | Camera | Seen | Similar | Novel | Average |
+| --- | --- | ---: | ---: | ---: | ---: |
+| GraspNet-Baseline | RealSense | 47.83 / **64.48** | 42.79 / **58.78** | 16.94 / **25.10** | 35.85 / **49.45** |
+| Scale-Balanced-Grasp | RealSense | 62.27 / **68.76** | 56.92 / **62.64** | 23.80 / **27.51** | 47.66 / **52.97** |
+| EconomicGrasp | RealSense | 69.30 / **74.90** | 61.50 / **64.51** | 25.28 / **28.16** | 52.02 / **55.85** |
+| GraspNet-Baseline | Kinect | 41.97 / **53.94** | 37.56 / **46.39** | 12.24 / **16.04** | 30.59 / **38.79** |
+| EconomicGrasp | Kinect | 63.75 / **69.90** | 52.43 / **58.00** | 19.61 / **22.04** | 45.26 / **49.98** |
 
 ## Computational Cost
 
