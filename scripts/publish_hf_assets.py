@@ -18,6 +18,7 @@ from pathlib import Path
 import subprocess
 import tarfile
 import tempfile
+import time
 from typing import Any, Iterable
 
 from huggingface_hub import HfApi, hf_hub_download
@@ -85,19 +86,43 @@ def _empty_index() -> dict[str, Any]:
     }
 
 
+def _retry_hub(operation: Any, description: str) -> Any:
+    """Retry transient Hugging Face failures, which are common for huge uploads."""
+    for attempt in range(1, 6):
+        try:
+            return operation()
+        except Exception as error:
+            response = getattr(error, "response", None)
+            status = getattr(response, "status_code", None)
+            if status not in {429, 500, 502, 503, 504} or attempt == 5:
+                raise
+            delay = 2 ** (attempt - 1)
+            print(
+                f"transient Hugging Face HTTP {status} while attempting to {description}; "
+                f"retrying in {delay}s ({attempt}/5)",
+                flush=True,
+            )
+            time.sleep(delay)
+
+
 def _load_index(*, repo_id: str, repo_type: str, token: str) -> dict[str, Any]:
     api = HfApi(token=token)
-    if INDEX_FILENAME not in set(
-        api.list_repo_files(repo_id=repo_id, repo_type=repo_type, token=token)
-    ):
+    remote_files = _retry_hub(
+        lambda: api.list_repo_files(repo_id=repo_id, repo_type=repo_type, token=token),
+        f"list {repo_type} repository {repo_id}",
+    )
+    if INDEX_FILENAME not in set(remote_files):
         return _empty_index()
     try:
-        path = hf_hub_download(
-            repo_id=repo_id,
-            repo_type=repo_type,
-            filename=INDEX_FILENAME,
-            token=token,
-            force_download=True,
+        path = _retry_hub(
+            lambda: hf_hub_download(
+                repo_id=repo_id,
+                repo_type=repo_type,
+                filename=INDEX_FILENAME,
+                token=token,
+                force_download=True,
+            ),
+            f"download {repo_type} index from {repo_id}",
         )
     except EntryNotFoundError:
         return _empty_index()
@@ -116,13 +141,16 @@ def _upload_index(*, api: HfApi, repo_id: str, repo_type: str, token: str, index
         json.dump(index, stream, indent=2, sort_keys=True)
         stream.write("\n")
     try:
-        api.upload_file(
-            path_or_fileobj=str(path),
-            path_in_repo=INDEX_FILENAME,
-            repo_id=repo_id,
-            repo_type=repo_type,
-            token=token,
-            commit_message="Update GraRe published asset index",
+        _retry_hub(
+            lambda: api.upload_file(
+                path_or_fileobj=str(path),
+                path_in_repo=INDEX_FILENAME,
+                repo_id=repo_id,
+                repo_type=repo_type,
+                token=token,
+                commit_message="Update GraRe published asset index",
+            ),
+            f"upload {repo_type} index to {repo_id}",
         )
     finally:
         path.unlink(missing_ok=True)
@@ -137,13 +165,16 @@ def _upload_file(
     repo_type: str,
     token: str,
 ) -> dict[str, Any]:
-    api.upload_file(
-        path_or_fileobj=str(source),
-        path_in_repo=path_in_repo,
-        repo_id=repo_id,
-        repo_type=repo_type,
-        token=token,
-        commit_message=f"Add {path_in_repo}",
+    _retry_hub(
+        lambda: api.upload_file(
+            path_or_fileobj=str(source),
+            path_in_repo=path_in_repo,
+            repo_id=repo_id,
+            repo_type=repo_type,
+            token=token,
+            commit_message=f"Add {path_in_repo}",
+        ),
+        f"upload {path_in_repo}",
     )
     return {
         "path": path_in_repo,

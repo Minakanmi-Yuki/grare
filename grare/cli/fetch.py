@@ -18,6 +18,7 @@ from pathlib import Path
 import shutil
 import tarfile
 import tempfile
+import time
 from typing import Any, Iterable
 
 from grare.config import load_config
@@ -111,14 +112,34 @@ def _hf_hub_download(*, repo_id: str, repo_type: str, filename: str) -> Path:
             "python -m pip install -e '.[hub]'."
         ) from error
     token = os.environ.get("HF_TOKEN")
-    return Path(
-        hf_hub_download(
+    def download() -> str:
+        return hf_hub_download(
             repo_id=repo_id,
             repo_type=repo_type,
             filename=filename,
             token=token,
         )
-    )
+
+    return Path(_retry_hub(download, f"download {repo_type} artifact {filename}"))
+
+
+def _retry_hub(operation: Any, description: str) -> Any:
+    """Retry transient Hugging Face service failures without hiding real errors."""
+    for attempt in range(1, 6):
+        try:
+            return operation()
+        except Exception as error:
+            response = getattr(error, "response", None)
+            status = getattr(response, "status_code", None)
+            if status not in {429, 500, 502, 503, 504} or attempt == 5:
+                raise
+            delay = 2 ** (attempt - 1)
+            print(
+                f"transient Hugging Face HTTP {status} while attempting to {description}; "
+                f"retrying in {delay}s ({attempt}/5)",
+                flush=True,
+            )
+            time.sleep(delay)
 
 
 def _load_index(*, repo_id: str, repo_type: str) -> dict[str, Any]:
