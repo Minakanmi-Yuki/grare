@@ -181,6 +181,15 @@ grare-feature --detector "$DETECTOR" --camera "$CAMERA"
 ```
 The resulting `local_cloud`, `object_cloud`, and `object_pooled` directories are the inputs for training.
 
+Published prepared features can instead be downloaded directly into the same
+location. Install the optional Hub client once, then use the same detector and
+camera arguments:
+
+```bash
+python -m pip install -e '.[hub]'
+grare-fetch features --detector "$DETECTOR" --camera "$CAMERA"
+```
+
 ## Train and Evaluate
 Select the configuration matching the prepared detector and camera:
 
@@ -198,6 +207,13 @@ grare-run --config configs/gn_realsense.yaml
 ```
 This trains, re-ranks, and runs the official evaluation in order. Outputs are
 written to `$GRARE_OUTPUT_ROOT`.
+
+To use a published trained model without retraining, download the checkpoint
+selected by the same configuration:
+
+```bash
+grare-fetch checkpoint --config configs/gn_realsense.yaml
+```
 
 ## Demo
 

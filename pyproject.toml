@@ -28,12 +28,16 @@ prepare = [
     "timm>=0.9",
     "open3d>=0.18",
 ]
+hub = [
+    "huggingface_hub>=0.26",
+]
 test = ["pytest>=7"]
 
 [project.scripts]
 grare-run = "grare.cli.run:main"
 grare-dump = "grare.cli.dump:main"
 grare-feature = "grare.cli.feature:main"
+grare-fetch = "grare.cli.fetch:main"
 grare-demo = "grare.cli.demo:main"
 grare-prepare = "grare.cli.prepare:main"
 grare-manifest = "grare.cli.manifest:main"
