@@ -245,7 +245,7 @@ The following offline GraspNet-1Billion results use the official evaluation prot
 | Scale-Balanced-Grasp | Detector | RealSense | 62.27 | 56.92 | 23.80 | 47.66 |
 | Scale-Balanced-Grasp | **GraRe** | RealSense | **68.76** | **62.64** | **27.51** | **52.97** |
 | EconomicGrasp | Detector | RealSense | 69.30 | 61.50 | 25.28 | 52.02 |
-| EconomicGrasp | **GraRe** | RealSense | **75.12** | **64.39** | **28.34** | **55.95** |
+| EconomicGrasp | **GraRe** | RealSense | **74.90** | **64.51** | **28.16** | **55.85** |
 | GraspNet-Baseline | Detector | Kinect | 41.97 | 37.56 | 12.24 | 30.59 |
 | GraspNet-Baseline | **GraRe** | Kinect | **53.94** | **46.39** | **16.04** | **38.79** |
 | EconomicGrasp | Detector | Kinect | 63.75 | 52.43 | 19.61 | 45.26 |
