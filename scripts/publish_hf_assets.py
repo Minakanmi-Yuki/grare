@@ -207,7 +207,9 @@ def _scene_groups(
     for scene in scenes:
         scene_bytes = _scene_size(scene)
         full_by_count = scenes_per_shard is not None and len(group) >= scenes_per_shard
-        full_by_size = group and group_bytes + scene_bytes > target_bytes
+        full_by_size = (
+            scenes_per_shard is None and group and group_bytes + scene_bytes > target_bytes
+        )
         if full_by_count or full_by_size:
             yield group
             group = []
