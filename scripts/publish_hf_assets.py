@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Publish completed GraRe feature shards or checkpoints to Hugging Face.
 
-This maintainer tool creates approximately 4 GiB uncompressed tar shards. The
-contained ``.npz`` files are already compressed, so tar reduces Hub file count
-without wasting CPU or sacrificing resumable uploads.
+This maintainer tool creates one uncompressed tar shard per five-scene group.
+The contained ``.npz`` files are already compressed, so tar reduces Hub file
+count without wasting CPU or sacrificing resumable uploads.
 
 Set ``HF_TOKEN`` before running. The token is deliberately never accepted as
 a command-line argument, where it could be recorded in shell history.
@@ -44,16 +44,10 @@ def parse_args() -> argparse.Namespace:
     features.add_argument("--data-root", default=os.environ.get("GRARE_DATA_ROOT"))
     features.add_argument("--repo-id", default=DEFAULT_DATASET_REPO)
     features.add_argument(
-        "--target-shard-gib",
-        type=float,
-        default=4.0,
-        help="Target uncompressed shard size (default: 4 GiB).",
-    )
-    features.add_argument(
         "--scenes-per-shard",
         type=int,
-        default=None,
-        help="Use a fixed scene count per shard instead of --target-shard-gib.",
+        default=5,
+        help="Scenes per tar shard (default: 5).",
     )
     features.add_argument("--dry-run", action="store_true")
 
@@ -194,30 +188,9 @@ def _upload_file(
     }
 
 
-def _scene_size(scene: Path) -> int:
-    return sum(path.stat().st_size for path in scene.rglob("*") if path.is_file())
-
-
-def _scene_groups(
-    scenes: list[Path], *, target_bytes: int, scenes_per_shard: int | None
-) -> Iterable[list[Path]]:
-    """Group ordered scenes, keeping each shard under the requested size when possible."""
-    group: list[Path] = []
-    group_bytes = 0
-    for scene in scenes:
-        scene_bytes = _scene_size(scene)
-        full_by_count = scenes_per_shard is not None and len(group) >= scenes_per_shard
-        full_by_size = (
-            scenes_per_shard is None and group and group_bytes + scene_bytes > target_bytes
-        )
-        if full_by_count or full_by_size:
-            yield group
-            group = []
-            group_bytes = 0
-        group.append(scene)
-        group_bytes += scene_bytes
-    if group:
-        yield group
+def _scene_groups(scenes: list[Path], size: int) -> Iterable[list[Path]]:
+    for offset in range(0, len(scenes), size):
+        yield scenes[offset : offset + size]
 
 
 def _create_tar(*, source_paths: Iterable[Path], data_root: Path, destination: Path) -> None:
@@ -292,17 +265,14 @@ def _published_shard(
 def _publish_features(args: argparse.Namespace) -> int:
     if not args.data_root:
         raise SystemExit("--data-root is required or GRARE_DATA_ROOT must be set.")
-    if args.scenes_per_shard is not None and args.scenes_per_shard < 1:
+    if args.scenes_per_shard < 1:
         raise SystemExit("--scenes-per-shard must be positive.")
-    if args.target_shard_gib <= 0:
-        raise SystemExit("--target-shard-gib must be positive.")
     data_root = Path(args.data_root).resolve()
     source_root = data_root / "relabeled" / args.detector / args.camera
     if not source_root.is_dir():
         raise FileNotFoundError(source_root)
     token = _require_token()
     api = HfApi(token=token)
-    target_bytes = int(args.target_shard_gib * 1024**3)
     index = _load_index(repo_id=args.repo_id, repo_type="dataset", token=token)
     feature_set = _feature_entry_index(
         index, detector=args.detector, camera=args.camera, data_root=data_root
@@ -315,11 +285,7 @@ def _publish_features(args: argparse.Namespace) -> int:
             scenes = sorted(path for path in stage_root.glob("scene_*") if path.is_dir())
             if not scenes:
                 raise RuntimeError(f"no scenes found under {stage_root}")
-            for group in _scene_groups(
-                scenes,
-                target_bytes=target_bytes,
-                scenes_per_shard=args.scenes_per_shard,
-            ):
+            for group in _scene_groups(scenes, args.scenes_per_shard):
                 first, last = group[0].name.removeprefix("scene_"), group[-1].name.removeprefix("scene_")
                 remote_path = (
                     f"shards/v1/{args.detector}/{args.camera}/{stage}/{split}/"
