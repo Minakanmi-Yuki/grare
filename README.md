@@ -132,9 +132,9 @@ Download assets from official source:
 | GN checkpoints | [GraspNet-Baseline](https://github.com/graspnet/graspnet-baseline#training-and-testing), `checkpoint-rs.tar` and `checkpoint-kn.tar` | `$GRARE_DETECTOR_CKPT_ROOT/graspnet_baseline/` |
 | SBG checkpoint | [Scale-Balanced-Grasp](https://github.com/mahaoxiang822/Scale-Balanced-Grasp#test), the `log_full_model/checkpoint.tar` in its Drive folder | `$GRARE_DETECTOR_CKPT_ROOT/scale_balanced_grasp/log_full_model/` |
 | EG checkpoints | [EconomicGrasp v1 release](https://github.com/iSEE-Laboratory/EconomicGrasp/releases/tag/v1), `economicgrasp_realsense.tar` and `economicgrasp_kinect.tar` | `$GRARE_DETECTOR_CKPT_ROOT/economicgrasp/` |
-| HGGD checkpoints | [HGGD Tsinghua Cloud](https://cloud.tsinghua.edu.cn/d/e3edfc2c8b114513b7eb/), the RealSense and Kinect checkpoints | `$GRARE_DETECTOR_CKPT_ROOT/hggd/realsense_checkpoint`, `$GRARE_DETECTOR_CKPT_ROOT/hggd/kinect_checkpoint` |
+| HGGD checkpoints | [HGGD Tsinghua Cloud](https://cloud.tsinghua.edu.cn/d/e3edfc2c8b114513b7eb/), `HGGD_realsense_checkpoint` and `HGGD_kinect_checkpoint` | `$GRARE_DETECTOR_CKPT_ROOT/hggd/` |
 | RNGNet checkpoints | bundled as `realsense.pth` and `kinect.pth` in the official [RNGNet repository](https://github.com/THU-VCLab/RNGNet) | `$GRARE_DETECTOR_CKPT_ROOT/rngnet/` |
-| Generalizing-Grasp checkpoint | official [Google Drive archive](https://drive.google.com/file/d/1WJj54l7MxFO1kgXoXA9tF6FCfB2okKr3/view); extract `logs/log_phy/checkpoint.tar` | `$GRARE_DETECTOR_CKPT_ROOT/generalizing_grasp/checkpoint.tar` |
+| Generalizing-Grasp checkpoint | official [Google Drive archive](https://drive.google.com/file/d/1WJj54l7MxFO1kgXoXA9tF6FCfB2okKr3/view); extract `log_phy/checkpoint.tar` | `$GRARE_DETECTOR_CKPT_ROOT/generalizing_grasp/log_phy/checkpoint.tar` |
 
 The downloaded assets should be arranged as follows:
 
@@ -159,13 +159,13 @@ $GRARE_ASSET_WORKSPACE/
 │   │   ├── economicgrasp_realsense.tar             EG RealSense
 │   │   └── economicgrasp_kinect.tar                EG Kinect
 │   ├── hggd/
-│   │   ├── realsense_checkpoint                    HGGD RealSense
-│   │   └── kinect_checkpoint                       HGGD Kinect
+│   │   ├── HGGD_realsense_checkpoint               HGGD RealSense
+│   │   └── HGGD_kinect_checkpoint                  HGGD Kinect
 │   ├── rngnet/
 │   │   ├── realsense.pth                           RNGNet RealSense
 │   │   └── kinect.pth                              RNGNet Kinect
 │   └── generalizing_grasp/
-│       └── checkpoint.tar                          Generalizing-Grasp RealSense
+│       └── log_phy/checkpoint.tar                  Generalizing-Grasp RealSense
 └── backbones/                                     frozen feature backbones
     ├── mobile_sam.pt
     └── point_mae_pretrain.pth

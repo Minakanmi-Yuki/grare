@@ -79,14 +79,14 @@ DEFAULT_CKPT_BY_CAMERA = {
         "graspnet_baseline": "graspnet_baseline/checkpoint-rs.tar",
         "scale_balanced_grasp": "scale_balanced_grasp/log_full_model/checkpoint.tar",
         "economicgrasp": "economicgrasp/economicgrasp_realsense.tar",
-        "hggd": "hggd/realsense_checkpoint",
+        "hggd": "hggd/HGGD_realsense_checkpoint",
         "rngnet": "rngnet/realsense.pth",
-        "generalizing_grasp": "generalizing_grasp/checkpoint.tar",
+        "generalizing_grasp": "generalizing_grasp/log_phy/checkpoint.tar",
     },
     "kinect": {
         "graspnet_baseline": "graspnet_baseline/checkpoint-kn.tar",
         "economicgrasp": "economicgrasp/economicgrasp_kinect.tar",
-        "hggd": "hggd/kinect_checkpoint",
+        "hggd": "hggd/HGGD_kinect_checkpoint",
         "rngnet": "rngnet/kinect.pth",
     },
 }

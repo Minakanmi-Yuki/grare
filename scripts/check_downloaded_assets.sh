@@ -239,10 +239,10 @@ check_selected_checkpoint() {
       check_file 'EG Kinect checkpoint' "$detector_checkpoint_root/economicgrasp/economicgrasp_kinect.tar"
       ;;
     hggd:realsense)
-      check_file 'HGGD RealSense checkpoint' "$detector_checkpoint_root/hggd/realsense_checkpoint"
+      check_file 'HGGD RealSense checkpoint' "$detector_checkpoint_root/hggd/HGGD_realsense_checkpoint"
       ;;
     hggd:kinect)
-      check_file 'HGGD Kinect checkpoint' "$detector_checkpoint_root/hggd/kinect_checkpoint"
+      check_file 'HGGD Kinect checkpoint' "$detector_checkpoint_root/hggd/HGGD_kinect_checkpoint"
       ;;
     rngnet:realsense)
       check_file 'RNGNet RealSense checkpoint' "$detector_checkpoint_root/rngnet/realsense.pth"
@@ -251,7 +251,7 @@ check_selected_checkpoint() {
       check_file 'RNGNet Kinect checkpoint' "$detector_checkpoint_root/rngnet/kinect.pth"
       ;;
     generalizing_grasp:realsense)
-      check_file 'Generalizing-Grasp RealSense checkpoint' "$detector_checkpoint_root/generalizing_grasp/checkpoint.tar"
+      check_file 'Generalizing-Grasp RealSense checkpoint' "$detector_checkpoint_root/generalizing_grasp/log_phy/checkpoint.tar"
       ;;
     generalizing_grasp:kinect)
       printf 'UNSUPPORTED: Generalizing-Grasp publishes a RealSense checkpoint only.\n' >&2
