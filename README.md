@@ -261,3 +261,4 @@ Training was performed on a system with one NVIDIA GeForce RTX 5090 GPU
 | GraspNet-Baseline | GraRe | RealSense | 1 h 12 min | TBD |
 | GraspNet-Baseline | GraRe | Kinect | 1 h 17 min | TBD |
 | Scale-Balanced-Grasp | GraRe | RealSense | 58 min | TBD |
+| EconomicGrasp | GraRe | RealSense | 4 h 34 min | 5.81 GiB |
