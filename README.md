@@ -291,6 +291,7 @@ detector-only baseline has not yet been evaluated independently.
 | Scale-Balanced-Grasp | RealSense | 62.27 / **68.54** | 56.92 / **62.34** | 23.80 / **27.32** | 47.66 / **52.73** |
 | EconomicGrasp | RealSense | 69.30 / **74.90** | 61.50 / **64.51** | 25.28 / **28.16** | 52.02 / **55.85** |
 | HGGD | RealSense | N/A / **67.11** | N/A / **54.92** | N/A / **25.49** | N/A / **49.17** |
+| RNGNet | Kinect | N/A / **74.84** | N/A / **59.33** | N/A / **25.01** | N/A / **53.06** |
 | GraspNet-Baseline | Kinect | 41.97 / **53.94** | 37.56 / **46.20** | 12.24 / **15.92** | 30.59 / **38.69** |
 | EconomicGrasp | Kinect | 63.75 / **69.55** | 52.43 / **56.78** | 19.61 / **22.44** | 45.26 / **49.59** |
 | HGGD | Kinect | N/A / **63.10** | N/A / **47.70** | N/A / **19.72** | N/A / **43.51** |
@@ -313,7 +314,8 @@ configured training workload.
 | Scale-Balanced-Grasp | GraRe | RealSense | 58 min | 12.74 GiB |
 | EconomicGrasp | GraRe | RealSense | 4 h 34 min | 5.81 GiB |
 | EconomicGrasp | GraRe | Kinect | 7 h 44 min | 5.81 GiB |
-| HGGD | GraRe | RealSense | 33 min | Not recorded |
-| HGGD | GraRe | Kinect | 18 min (pre-alignment) | Not recorded |
+| HGGD | GraRe | RealSense | 33 min | 9.22 GiB |
+| HGGD | GraRe | Kinect | 18 min (pre-alignment) | 9.22 GiB |
+| RNGNet | GraRe | Kinect | 1 h 9 min | 5.81 GiB |
 
 The HGGD Kinect cost row will be refreshed after its queued GN-aligned run.
