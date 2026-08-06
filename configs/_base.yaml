@@ -54,4 +54,4 @@ rerank:
   device: cuda
 
 eval:
-  proc: 16
+  proc: 20
