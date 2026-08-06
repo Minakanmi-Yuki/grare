@@ -14,11 +14,12 @@ class HGGDConfig:
     checkpoint_path: str
     camera: str = "realsense"
     split: str = "test"
-    # HGGD's two-stage detector is frame-oriented. Keep one frame in flight
-    # so its variable-size local regions never make a batch silently uneven.
+    # HGGD's two-stage detector is frame-oriented, so its upstream model still
+    # runs one frame at a time. Keep batch_size=1 but use the same input
+    # pipeline depth as the other detectors to hide RGB-D file latency.
     batch_size: int = 1
-    data_workers: int = 2
-    prefetch_factor: int = 2
+    data_workers: int = 8
+    prefetch_factor: int = 4
     pin_memory: bool = True
     persistent_workers: bool = True
     # Match the released HGGD test command exactly.

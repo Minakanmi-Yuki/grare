@@ -10,3 +10,20 @@ paths:
   checkpoint_dir: ${GRARE_OUTPUT_ROOT}/checkpoints/hggd_kinect
   rerank_dir: ${GRARE_OUTPUT_ROOT}/predictions/hggd_kinect
   eval_dir: ${GRARE_OUTPUT_ROOT}/evaluation/hggd_kinect
+  packed_train: ${GRARE_DATA_ROOT}/packed/hggd/kinect/train
+
+train:
+  # Keep the Kinect comparison budget aligned with GN Kinect. HGGD's
+  # detector-specific dump and feature archives remain unchanged.
+  max_epochs: 80
+  min_optimizer_steps: 50000
+  min_checkpoint_steps: 20000
+  early_stop_patience: 15
+  scheduler_patience: 8
+  scheduler_min_lr: 0.000001
+  scheduler_warmup_steps: 30000
+  checkpoint_interval_steps: 5000
+  local_health_max_batches: 4
+  local_health_seed: 20260710
+  min_local_raw_rms: 0.05
+  min_local_shuffle_ratio: 0.05

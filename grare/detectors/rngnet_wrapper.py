@@ -15,8 +15,10 @@ class RNGNetConfig:
     camera: str = "realsense"
     split: str = "test"
     batch_size: int = 1
-    data_workers: int = 2
-    prefetch_factor: int = 2
+    # RNGNet is frame-oriented, but a deeper CPU input window keeps the GPU
+    # fed while RGB-D frames are decoded and loaded.
+    data_workers: int = 8
+    prefetch_factor: int = 4
     pin_memory: bool = True
     persistent_workers: bool = True
     num_point: int = 0

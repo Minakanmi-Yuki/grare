@@ -28,6 +28,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Rebuild the configured packed training dataset before training.",
     )
+    parser.add_argument(
+        "--force-eval",
+        action="store_true",
+        help="Discard completed evaluation shards before running eval.",
+    )
     parser.add_argument("--set", action="append", default=[], dest="overrides")
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
@@ -184,13 +189,13 @@ def _rerank_command(config: dict[str, Any]) -> list[str]:
     ]
 
 
-def _eval_command(config: dict[str, Any]) -> list[str]:
+def _eval_command(config: dict[str, Any], *, force: bool = False) -> list[str]:
     paths = config["paths"]
     output = _stage_dir(config, "eval_dir")
     tag = config["name"]
     if _is_detector_baseline(config):
         tag = f"{tag}_detector_baseline"
-    return _module_command("grare.cli.evaluate") + [
+    command = _module_command("grare.cli.evaluate") + [
         "--dataset-root", paths["graspnet_root"],
         "--dump-folder", str(_stage_dir(config, "rerank_dir")),
         "--camera", config["camera"],
@@ -200,6 +205,9 @@ def _eval_command(config: dict[str, Any]) -> list[str]:
         "--save-summary", str(output / "per_scene_raw.json"),
         "--tag", tag,
     ]
+    if force:
+        command.append("--force")
+    return command
 
 
 def _pack_execution(
@@ -235,7 +243,7 @@ def main() -> int:
     stop = STAGES.index(args.stop_after)
     if stop < start:
         raise ValueError("--stop-after precedes --start-from")
-    builders = {"train": _train_command, "rerank": _rerank_command, "eval": _eval_command}
+    builders = {"train": _train_command, "rerank": _rerank_command}
     for stage in STAGES[start : stop + 1]:
         if stage == "pack":
             if args.dry_run:
@@ -255,7 +263,11 @@ def main() -> int:
                 print(f"[pack] skipped: {skipped_reason}", flush=True)
                 continue
         else:
-            command = builders[stage](config)
+            command = (
+                _eval_command(config, force=args.force_eval)
+                if stage == "eval"
+                else builders[stage](config)
+            )
         print(f"[{stage}] {shlex.join(command)}", flush=True)
         if not args.dry_run:
             subprocess.run(command, check=True)

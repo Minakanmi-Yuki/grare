@@ -89,8 +89,8 @@ def test_wrapper_targets_an_adapter_that_exists(
     assert "--checkpoint_path" in command
     assert str(tmp_path / name / "test") in command
     if name in {"hggd", "rngnet", "generalizing_grasp"}:
-        assert command[command.index("--data_workers") + 1] == "2"
-        assert command[command.index("--prefetch-factor") + 1] == "2"
+        assert command[command.index("--data_workers") + 1] == "8"
+        assert command[command.index("--prefetch-factor") + 1] == "4"
 
 
 @pytest.mark.parametrize("name,wrapper_cls,config_cls,adapter", _CASES)

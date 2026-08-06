@@ -45,8 +45,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dump_dir", required=True)
     parser.add_argument("--camera", choices=("realsense", "kinect"), required=True)
     parser.add_argument("--split", choices=("train", "test"), required=True)
-    parser.add_argument("--data_workers", type=int, default=2)
-    parser.add_argument("--prefetch-factor", type=int, default=2)
+    parser.add_argument("--data_workers", type=int, default=8)
+    parser.add_argument("--prefetch-factor", type=int, default=4)
     parser.add_argument("--center-num", type=int, default=48)
     parser.add_argument("--local-k", type=int, default=10)
     parser.add_argument(

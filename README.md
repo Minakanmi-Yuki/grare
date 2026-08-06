@@ -282,24 +282,38 @@ grare-demo --detector graspnet_baseline --camera realsense --scene 0100 --frame 
 
 ## Results
 The following offline GraspNet-1Billion results use the official evaluation protocol.
-Each metric is reported as `Detector / GraRe`.
+Each metric is reported as `Detector / GraRe`; `N/A` indicates that the
+detector-only baseline has not yet been evaluated independently.
 
 | Frozen detector | Camera | Seen | Similar | Novel | Average |
 | --- | --- | ---: | ---: | ---: | ---: |
-| GraspNet-Baseline | RealSense | 47.83 / **64.48** | 42.79 / **58.78** | 16.94 / **25.10** | 35.85 / **49.45** |
-| Scale-Balanced-Grasp | RealSense | 62.27 / **68.76** | 56.92 / **62.64** | 23.80 / **27.51** | 47.66 / **52.97** |
+| GraspNet-Baseline | RealSense | 47.83 / **64.16** | 42.79 / **58.47** | 16.94 / **25.31** | 35.85 / **49.32** |
+| Scale-Balanced-Grasp | RealSense | 62.27 / **68.54** | 56.92 / **62.34** | 23.80 / **27.32** | 47.66 / **52.73** |
 | EconomicGrasp | RealSense | 69.30 / **74.90** | 61.50 / **64.51** | 25.28 / **28.16** | 52.02 / **55.85** |
-| GraspNet-Baseline | Kinect | 41.97 / **53.94** | 37.56 / **46.39** | 12.24 / **16.04** | 30.59 / **38.79** |
-| EconomicGrasp | Kinect | 63.75 / **69.90** | 52.43 / **58.00** | 19.61 / **22.04** | 45.26 / **49.98** |
+| HGGD | RealSense | N/A / **67.11** | N/A / **54.92** | N/A / **25.49** | N/A / **49.17** |
+| GraspNet-Baseline | Kinect | 41.97 / **53.94** | 37.56 / **46.20** | 12.24 / **15.92** | 30.59 / **38.69** |
+| EconomicGrasp | Kinect | 63.75 / **69.55** | 52.43 / **56.78** | 19.61 / **22.44** | 45.26 / **49.59** |
+| HGGD | Kinect | N/A / **63.10** | N/A / **47.70** | N/A / **19.72** | N/A / **43.51** |
+
+The HGGD Kinect row will be refreshed after its queued GN-aligned retraining
+and evaluation complete.
 
 ## Computational Cost
 
 Training was performed on a system with one NVIDIA GeForce RTX 5090 GPU
 (32 GiB VRAM) and an Intel Xeon Platinum 8470Q CPU.
 
+VRAM is the stable `nvidia-smi` reading after a one-minute warm-up with the
+configured training workload.
+
 | Frozen detector | Ranking | Camera | Time | VRAM |
 | --- | --- | --- | ---: | ---: |
-| GraspNet-Baseline | GraRe | RealSense | 1 h 12 min | TBD |
-| GraspNet-Baseline | GraRe | Kinect | 1 h 17 min | TBD |
-| Scale-Balanced-Grasp | GraRe | RealSense | 58 min | TBD |
+| GraspNet-Baseline | GraRe | RealSense | 1 h 12 min | 12.57 GiB |
+| GraspNet-Baseline | GraRe | Kinect | 1 h 17 min | 5.81 GiB |
+| Scale-Balanced-Grasp | GraRe | RealSense | 58 min | 12.74 GiB |
 | EconomicGrasp | GraRe | RealSense | 4 h 34 min | 5.81 GiB |
+| EconomicGrasp | GraRe | Kinect | 7 h 44 min | 5.81 GiB |
+| HGGD | GraRe | RealSense | 33 min | Not recorded |
+| HGGD | GraRe | Kinect | 18 min (pre-alignment) | Not recorded |
+
+The HGGD Kinect cost row will be refreshed after its queued GN-aligned run.

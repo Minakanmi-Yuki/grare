@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from grare.cli.run import _pack_command, _pack_execution, _rerank_command, _train_command
+from grare.cli.run import _eval_command, _pack_command, _pack_execution, _rerank_command, _train_command
 
 
 def _config(*, resume_from: str | None) -> dict:
@@ -118,3 +118,19 @@ def test_rerank_command_uses_fixed_protocol_arguments() -> None:
     assert "--rescoring-score-weight" in command
     assert "--pose-dim" not in command
     assert "--score-normalization" not in command
+
+
+def test_eval_command_force_discards_prior_checkpoint_shards() -> None:
+    config = {
+        "name": "example",
+        "camera": "kinect",
+        "paths": {
+            "graspnet_root": "/data/graspnet",
+            "rerank_dir": "/output/predictions",
+            "eval_dir": "/output/evaluation",
+        },
+        "rerank": {"lambda": 1.0},
+        "eval": {"proc": 16},
+    }
+    assert "--force" not in _eval_command(config)
+    assert _eval_command(config, force=True)[-1] == "--force"
