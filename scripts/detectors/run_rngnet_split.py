@@ -66,7 +66,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _load_rngnet() -> object:
+def _load_rngnet() -> tuple[object, object]:
     if not (RNGNET_ROOT / "RNGNet.py").is_file():
         raise SystemExit(
             f"RNGNet source is missing: {RNGNET_ROOT}\n"
@@ -75,9 +75,26 @@ def _load_rngnet() -> object:
         )
     if str(RNGNET_ROOT) not in sys.path:
         sys.path.insert(0, str(RNGNET_ROOT))
-    from RNGNet import RngNet  # type: ignore[import-not-found]
+    import RNGNet as rngnet_module  # type: ignore[import-not-found]
 
-    return RngNet
+    return rngnet_module.RngNet, rngnet_module
+
+
+def _bind_camera_intrinsics(rngnet_module: object, camera: str) -> None:
+    """Make the standalone RNGNet helpers use the requested camera.
+
+    The released module stores ``self.intrinsics`` correctly, but its module-
+    level ``center2dtopc`` and ``detect_6d_grasp_multi`` helpers call
+    ``get_camera_intrinsic()`` without an argument.  That helper defaults to
+    RealSense, which silently corrupts Kinect 2D-to-3D conversion.  Bind the
+    no-argument path to the active camera while preserving explicit calls.
+    """
+    original = getattr(rngnet_module, "get_camera_intrinsic")
+
+    def camera_intrinsic(camera_name: str | None = None) -> np.ndarray:
+        return original(camera if camera_name is None else camera_name)
+
+    setattr(rngnet_module, "get_camera_intrinsic", camera_intrinsic)
 
 
 def main() -> int:
@@ -122,7 +139,8 @@ def main() -> int:
     device = configure_cuda(tf32=bool(args.tf32), cudnn_benchmark=bool(args.cudnn_benchmark))
     if str(device) != "cuda:0":
         raise SystemExit("RNGNet requires a CUDA device.")
-    RngNet = _load_rngnet()
+    RngNet, rngnet_module = _load_rngnet()
+    _bind_camera_intrinsics(rngnet_module, args.camera)
     detector = RngNet(
         checkpoint_path=str(checkpoint_path),
         camera=args.camera,

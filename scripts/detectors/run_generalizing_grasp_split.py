@@ -158,6 +158,69 @@ def _minkowski_batch(ME, cloud: np.ndarray, normals: np.ndarray, *, voxel_size: 
     }
 
 
+def _install_empty_candidate_guard(model: torch.nn.Module) -> None:
+    """Make the released stage-1 module robust to an empty candidate mask.
+
+    The upstream ``ApproachNet_regression_view_fps`` unconditionally calls
+    ``furthest_point_sample`` with 1024 points.  On RGB-D frames whose
+    predicted objectness/graspness mask is empty (or has fewer than 1024
+    points), the CUDA extension receives an undersized tensor and can raise
+    ``setStorage ... storage size 0``.  This hook changes nothing for normal
+    frames; for an undersized mask it promotes the highest-graspness points to
+    a conservative 1024-point fallback so the released stage-2 code can run
+    and produce a valid (possibly empty after post-processing) grasp group.
+    """
+    fallback_count = 0
+
+    def guard(_module: torch.nn.Module, _inputs: tuple[object, ...], output: object) -> object:
+        nonlocal fallback_count
+        if not isinstance(output, torch.Tensor) or output.ndim != 3 or output.shape[1] < 3:
+            return output
+        # output is (B, 3, N): two objectness logits and graspness logit.
+        objectness = output[:, :2].argmax(dim=1)
+        mask = (output[:, 2] > 0.1) & (objectness == 1)
+        target = min(1024, int(output.shape[2]))
+        needs_fallback = mask.sum(dim=1) < target
+        if not bool(needs_fallback.any()):
+            return output
+        fixed = output.clone()
+        for batch_index in range(output.shape[0]):
+            if not bool(needs_fallback[batch_index]):
+                continue
+            indices = torch.topk(output[batch_index, 2], k=target, dim=0).indices
+            fixed[batch_index, 0, indices] = -1.0e3
+            fixed[batch_index, 1, indices] = 1.0e3
+            fixed[batch_index, 2, indices] = torch.clamp(
+                fixed[batch_index, 2, indices], min=0.2
+            )
+            fallback_count += 1
+        if fallback_count == 1:
+            print(
+                json.dumps(
+                    {
+                        "stage": "generalizing_grasp_candidate_fallback",
+                        "fallback_points": target,
+                        "original_candidates": int(mask[0].sum().item()),
+                    }
+                ),
+                flush=True,
+            )
+        return fixed
+
+    installed = 0
+    for module in model.modules():
+        # Avoid importing the upstream class solely for an isinstance check;
+        # its name is stable across the released checkpoint revisions.
+        if module.__class__.__name__ == "ApproachNet_regression_view_fps":
+            module.graspable_head.register_forward_hook(guard)
+            installed += 1
+    if installed == 0:
+        raise RuntimeError(
+            "Generalizing-Grasp stage-1 module was not found; cannot install "
+            "the empty-candidate safety guard."
+        )
+
+
 def _filter_and_save(
     predictions: np.ndarray,
     *,
@@ -183,8 +246,8 @@ def _filter_and_save(
 
 def main() -> int:
     args = parse_args()
-    if args.num_point <= 0 or args.num_view <= 0 or args.voxel_size <= 0:
-        raise SystemExit("--num_point, --num_view, and --voxel_size must be positive")
+    if args.num_point < 1024 or args.num_view <= 0 or args.voxel_size <= 0:
+        raise SystemExit("--num_point must be at least 1024; --num_view and --voxel_size must be positive")
     if args.data_workers < 0 or args.prefetch_factor <= 0:
         raise SystemExit("--data_workers must be non-negative and --prefetch-factor must be positive")
     if args.max_batches is not None and args.max_batches < 0:
@@ -226,6 +289,7 @@ def main() -> int:
     ).to(device).eval()
     checkpoint = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(checkpoint["model_state_dict"])
+    _install_empty_candidate_guard(model)
 
     started = time.perf_counter()
     print(json.dumps({
