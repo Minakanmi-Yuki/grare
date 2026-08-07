@@ -109,6 +109,11 @@ Build the CUDA extensions and verify them:
 ./scripts/verify_detector_extensions.sh
 ```
 
+This additionally builds RNGNet's optional Cython module. HGGD has no native
+extension in its official release; its pure-PyTorch model sources are checked
+by the same scripts, and GraRe's adapter supplies the compatibility path used
+for dump inference.
+
 ## Downloads
 
 GraRe requires the GraspNet-1Billion dataset, detector checkpoints,

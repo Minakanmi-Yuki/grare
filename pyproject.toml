@@ -31,6 +31,7 @@ prepare = [
 detectors = [
     # HGGD and the standalone RNGNet decoder use Numba; HGGD additionally
     # imports scikit-image for its released heatmap decoder.
+    "Cython>=3.0",
     "numba>=0.60",
     "scikit-image>=0.22",
 ]

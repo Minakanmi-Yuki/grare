@@ -8,7 +8,9 @@ Usage: ./scripts/build_detector_extensions.sh [--skip-economic]
 
 Builds the PointNet2 and KNN operators for GraspNet-Baseline and
 Scale-Balanced-Grasp, plus MinkowskiEngine, PointNet2, and KNN for
-EconomicGrasp. Clone the detector sources into external/ first.
+EconomicGrasp. It also builds RNGNet's optional Cython module. HGGD has no
+native extension in its official repository; the script validates its
+pure-PyTorch runtime source instead. Clone detector sources into external/ first.
 
 Environment variables:
   CUDA_HOME              CUDA toolkit root (default: /usr/local/cuda)
@@ -58,6 +60,24 @@ run_setup_install() {
   (cd "$directory" && python setup.py install)
 }
 
+build_rngnet() {
+  local directory="$project_root/external/RNGNet"
+  printf '%s\n' '== Building RNGNet optional Cython module =='
+  (cd "$directory" && python setup.py build_ext --inplace)
+}
+
+verify_hggd_runtime_source() {
+  local directory="$project_root/external/HGGD"
+  # The released HGGD project is Python/PyTorch only: it contains no setup.py
+  # or custom CUDA source. GraRe supplies compatibility shims for its unused
+  # CuPoch/PyTorch3D imports in the dump adapter.
+  if [[ ! -f "$directory/models/anchornet.py" || ! -f "$directory/models/localgraspnet.py" ]]; then
+    printf 'HGGD model sources are incomplete under %s.\n' "$directory" >&2
+    exit 1
+  fi
+  printf '%s\n' 'HGGD has no native extension; verified pure-PyTorch model sources.'
+}
+
 apply_economicgrasp_patch() {
   local patch_file="$project_root/scripts/patches/economicgrasp_minkowski_cuda13.patch"
   local me_root="$project_root/external/EconomicGrasp/libs/MinkowskiEngine"
@@ -99,6 +119,12 @@ apply_graspnet_baseline_dump_patch() {
 require_dir "$project_root/external/graspnet-baseline/pointnet2"
 require_dir "$project_root/external/graspnet-baseline/knn"
 require_dir "$project_root/external/Scale-Balanced-Grasp/pointnet2"
+require_dir "$project_root/external/HGGD"
+require_dir "$project_root/external/RNGNet"
+if [[ ! -f "$project_root/external/RNGNet/RNGNet.py" ]]; then
+  printf 'RNGNet source is missing: %s\n' "$project_root/external/RNGNet/RNGNet.py" >&2
+  exit 1
+fi
 if [[ "$skip_economic" == false ]]; then
   require_dir "$project_root/external/EconomicGrasp/libs/MinkowskiEngine"
   require_dir "$project_root/external/EconomicGrasp/libs/pointnet2"
@@ -147,5 +173,8 @@ if [[ "$skip_economic" == false ]]; then
   run_setup_install 'EconomicGrasp PointNet2' "$project_root/external/EconomicGrasp/libs/pointnet2"
   run_setup_install 'EconomicGrasp KNN' "$project_root/external/EconomicGrasp/libs/knn"
 fi
+
+verify_hggd_runtime_source
+build_rngnet
 
 printf '%s\n' 'Detector extension build complete.'

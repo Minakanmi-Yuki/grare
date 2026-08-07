@@ -7,7 +7,9 @@ usage() {
 Usage: ./scripts/verify_detector_extensions.sh [--skip-economic] [--import-only]
 
 Imports every compiled detector extension. --import-only does not require a
-working NVIDIA driver, which is useful immediately after a build.
+working NVIDIA driver, which is useful immediately after a build. HGGD has no
+native extension, so its released pure-PyTorch model sources are checked;
+RNGNet's optional Cython module is imported from its source directory.
 EOF
 }
 
@@ -65,6 +67,11 @@ def import_with_paths(label: str, paths: list[Path], modules: list[str]) -> dict
         sys.path = original_path
 
 
+for source in (root / "external/HGGD/models/anchornet.py", root / "external/HGGD/models/localgraspnet.py"):
+    if not source.is_file():
+        raise SystemExit(f"missing HGGD runtime source: {source}")
+print("ok hggd pure-PyTorch runtime sources")
+import_with_paths("rngnet", [root / "external/RNGNet"], ["RNGNet"])
 import_with_paths(
     "graspnet_baseline",
     [root / "external/graspnet-baseline/pointnet2", root / "external/graspnet-baseline/knn"],
