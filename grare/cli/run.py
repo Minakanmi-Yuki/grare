@@ -157,17 +157,27 @@ def _is_detector_baseline(config: dict[str, Any]) -> bool:
     return float(config["rerank"]["lambda"]) == 0.0
 
 
-def _stage_dir(config: dict[str, Any], key: str) -> Path:
-    """Keep detector-baseline artifacts out of the GraRe artifact directories.
+def _lambda_artifact_suffix(config: dict[str, Any]) -> str:
+    """Return the output suffix for a non-default score-fusion weight."""
+    weight = float(config["rerank"]["lambda"])
+    if weight == 1.0:
+        return ""
+    if weight == 0.0:
+        return "_detector_baseline"
+    # Twelve significant figures is ample for an explicit YAML/CLI ablation
+    # while keeping portable directory names such as ``lambda_0p2``.
+    return "_lambda_" + format(weight, ".12g").replace(".", "p")
 
-    Both runs consume the same features and checkpoint, so writing them to the
-    same rerank/eval directories would silently overwrite the GraRe results the
-    baseline is meant to be compared against.
+
+def _stage_dir(config: dict[str, Any], key: str) -> Path:
+    """Keep every score-fusion ablation out of reported artifact directories.
+
+    All ablations consume the same features and checkpoint. Writing them to the
+    reported GraRe directories would silently overwrite the results that the
+    lambda sweep is meant to compare against.
     """
     directory = Path(config["paths"][key])
-    if _is_detector_baseline(config):
-        return directory.with_name(directory.name + "_detector_baseline")
-    return directory
+    return directory.with_name(directory.name + _lambda_artifact_suffix(config))
 
 
 def _rerank_command(config: dict[str, Any]) -> list[str]:
@@ -192,9 +202,7 @@ def _rerank_command(config: dict[str, Any]) -> list[str]:
 def _eval_command(config: dict[str, Any], *, force: bool = False) -> list[str]:
     paths = config["paths"]
     output = _stage_dir(config, "eval_dir")
-    tag = config["name"]
-    if _is_detector_baseline(config):
-        tag = f"{tag}_detector_baseline"
+    tag = f"{config['name']}{_lambda_artifact_suffix(config)}"
     command = _module_command("grare.cli.evaluate") + [
         "--dataset-root", paths["graspnet_root"],
         "--dump-folder", str(_stage_dir(config, "rerank_dir")),

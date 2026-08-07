@@ -1,12 +1,13 @@
-"""Download published GraRe prepared features or trained checkpoints.
+"""Download published GraRe dumps, prepared features, or trained checkpoints.
 
-Feature archives are downloaded from the GraRe Hugging Face Dataset repository
-and extracted directly into ``$GRARE_DATA_ROOT``.  Checkpoints are downloaded
-from the matching Model repository into ``$GRARE_OUTPUT_ROOT``.
+Dump and feature archives are downloaded from the GraRe Hugging Face Dataset
+repository and extracted into their matching asset roots. Checkpoints are
+downloaded from the matching Model repository into ``$GRARE_OUTPUT_ROOT``.
 
 Examples:
     grare-fetch features --detector economicgrasp --camera realsense
-    grare-fetch checkpoint --config configs/eg_realsense.yaml
+    grare-fetch dumps --detector economicgrasp --camera realsense
+    grare-fetch checkpoint --detector economicgrasp --camera realsense
 """
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ import tempfile
 import time
 from typing import Any, Iterable
 
-from grare.config import load_config
+from grare.config import config_name_for_selection, load_config
 
 
 DEFAULT_DATASET_REPO = "jibaoyuan/grare-graspnet"
@@ -75,10 +76,38 @@ def parse_args() -> argparse.Namespace:
     )
     features.add_argument("--dry-run", action="store_true")
 
+    dumps = subparsers.add_parser(
+        "dumps", help="Download frozen-detector dumps into $GRARE_DUMP_ROOT."
+    )
+    dumps.add_argument("--detector", required=True)
+    dumps.add_argument("--camera", required=True)
+    dumps.add_argument(
+        "--split",
+        choices=(*SPLITS, "all"),
+        default="all",
+        help="Download train, test, or both splits (default: all).",
+    )
+    dumps.add_argument(
+        "--output-root",
+        default=None,
+        help="Override $GRARE_DUMP_ROOT; intended for an alternate asset workspace.",
+    )
+    dumps.add_argument(
+        "--repo-id",
+        default=os.environ.get("GRARE_HF_DATASET_REPO", DEFAULT_DATASET_REPO),
+        help="Hugging Face Dataset repository.",
+    )
+    dumps.add_argument("--overwrite", action="store_true")
+    dumps.add_argument("--no-verify", action="store_true")
+    dumps.add_argument("--dry-run", action="store_true")
+
     checkpoint = subparsers.add_parser(
         "checkpoint", help="Download a trained checkpoint into $GRARE_OUTPUT_ROOT."
     )
-    checkpoint.add_argument("--config", required=True)
+    selection = checkpoint.add_mutually_exclusive_group(required=True)
+    selection.add_argument("--config", help="Config path (kept for backward compatibility).")
+    selection.add_argument("--detector", help="Frozen detector used to train the checkpoint.")
+    checkpoint.add_argument("--camera", help="Camera paired with --detector.")
     checkpoint.add_argument(
         "--output-root",
         default=None,
@@ -181,10 +210,10 @@ def _stage_selection(values: list[str]) -> tuple[str, ...]:
 def _safe_member_destination(root: Path, member: tarfile.TarInfo) -> Path:
     name = Path(member.name)
     if name.is_absolute() or ".." in name.parts or member.issym() or member.islnk():
-        raise RuntimeError(f"unsafe member in published feature shard: {member.name!r}")
+        raise RuntimeError(f"unsafe member in published asset shard: {member.name!r}")
     destination = root / name
     if root.resolve() not in {destination.resolve(), *destination.resolve().parents}:
-        raise RuntimeError(f"feature shard member escapes output root: {member.name!r}")
+        raise RuntimeError(f"asset shard member escapes output root: {member.name!r}")
     return destination
 
 
@@ -194,7 +223,7 @@ def _extract_shard(*, source: Path, output_root: Path, overwrite: bool) -> None:
             if member.isdir():
                 continue
             if not member.isfile():
-                raise RuntimeError(f"unsupported member in published feature shard: {member.name!r}")
+                raise RuntimeError(f"unsupported member in published asset shard: {member.name!r}")
             destination = _safe_member_destination(output_root, member)
             if destination.exists():
                 if destination.stat().st_size == member.size:
@@ -241,6 +270,24 @@ def _verify_feature_tree(
             summary = base / "local_cloud" / split / "manifest.summary.json"
             if not manifest.is_file() or not summary.is_file():
                 raise RuntimeError(f"missing {detector} {camera} {split} manifest files")
+
+
+def _verify_dump_tree(
+    *,
+    output_root: Path,
+    detector: str,
+    camera: str,
+    splits: Iterable[str],
+    expected_counts: dict[str, Any],
+) -> None:
+    for split in splits:
+        expected = int(expected_counts[split])
+        root = output_root / detector / split
+        actual = sum(1 for _ in root.glob(f"scene_*/{camera}/*.npy")) if root.is_dir() else 0
+        if actual != expected:
+            raise RuntimeError(
+                f"incomplete {detector} {camera} {split} dumps: {actual} / {expected} frames"
+            )
 
 
 def _fetch_features(args: argparse.Namespace) -> int:
@@ -315,6 +362,75 @@ def _fetch_features(args: argparse.Namespace) -> int:
     return 0
 
 
+def _fetch_dumps(args: argparse.Namespace) -> int:
+    output_root = Path(args.output_root) if args.output_root else _required_env("GRARE_DUMP_ROOT")
+    splits = SPLITS if args.split == "all" else (args.split,)
+    index = _load_index(repo_id=args.repo_id, repo_type="dataset")
+    key = f"{args.detector}/{args.camera}"
+    dump_set = index.get("dump_sets", {}).get(key)
+    if not isinstance(dump_set, dict):
+        available = ", ".join(sorted(index.get("dump_sets", {}))) or "none"
+        raise RuntimeError(f"no published dumps for {key}; available: {available}")
+    if dump_set.get("complete") is not True:
+        raise RuntimeError(
+            f"published dumps for {key} are still being uploaded; retry after the release is complete"
+        )
+    expected_counts = dump_set.get("frame_counts", {})
+    if any(split not in expected_counts for split in splits):
+        raise RuntimeError(f"published index lacks dump frame counts for {key}")
+    shards = [
+        entry
+        for entry in dump_set.get("shards", [])
+        if entry.get("split") in splits and entry.get("stage") == "dumps"
+    ]
+    if not shards:
+        raise RuntimeError(f"published index has no matching dump shards for {key}")
+    total_bytes = sum(int(entry.get("size", 0)) for entry in shards)
+    print(
+        json.dumps(
+            {
+                "stage": "fetch_dumps",
+                "repo_id": args.repo_id,
+                "detector": args.detector,
+                "camera": args.camera,
+                "splits": list(splits),
+                "shards": len(shards),
+                "bytes": total_bytes,
+                "output_root": str(output_root),
+                "dry_run": bool(args.dry_run),
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
+    if args.dry_run:
+        for entry in shards:
+            print(entry["path"], flush=True)
+        return 0
+    for number, entry in enumerate(shards, start=1):
+        source = _hf_hub_download(
+            repo_id=args.repo_id, repo_type="dataset", filename=str(entry["path"])
+        )
+        _verify_download(source, entry)
+        _extract_shard(source=source, output_root=output_root, overwrite=bool(args.overwrite))
+        print(
+            json.dumps(
+                {"stage": "fetch_dumps_progress", "shard": number, "shards": len(shards), "path": entry["path"]},
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+    if not args.no_verify:
+        _verify_dump_tree(
+            output_root=output_root,
+            detector=args.detector,
+            camera=args.camera,
+            splits=splits,
+            expected_counts=expected_counts,
+        )
+    return 0
+
+
 def _atomic_copy(*, source: Path, destination: Path, overwrite: bool, entry: dict[str, Any]) -> None:
     if destination.exists():
         matches_size = destination.stat().st_size == source.stat().st_size
@@ -336,8 +452,24 @@ def _atomic_copy(*, source: Path, destination: Path, overwrite: bool, entry: dic
     tmp_path.replace(destination)
 
 
+def _checkpoint_config(args: argparse.Namespace) -> tuple[dict[str, Any], Path]:
+    if args.config:
+        if args.camera:
+            raise SystemExit("--camera cannot be combined with --config")
+        path = Path(args.config)
+    else:
+        if not args.camera:
+            raise SystemExit("--camera is required with --detector")
+        try:
+            name = config_name_for_selection(args.detector, args.camera)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
+        path = Path(__file__).resolve().parents[2] / "configs" / f"{name}.yaml"
+    return load_config(path, []), path
+
+
 def _fetch_checkpoint(args: argparse.Namespace) -> int:
-    config = load_config(args.config, [])
+    config, config_path = _checkpoint_config(args)
     checkpoint_dir = Path(config["paths"]["checkpoint_dir"])
     output_root = Path(args.output_root) if args.output_root else checkpoint_dir.parent.parent
     name = str(config["name"])
@@ -354,7 +486,7 @@ def _fetch_checkpoint(args: argparse.Namespace) -> int:
             {
                 "stage": "fetch_checkpoint",
                 "repo_id": args.repo_id,
-                "config": str(args.config),
+                "config": str(config_path),
                 "name": name,
                 "files": len(files),
                 "output_root": str(output_root),
@@ -388,6 +520,8 @@ def main() -> int:
     args = parse_args()
     if args.command == "features":
         return _fetch_features(args)
+    if args.command == "dumps":
+        return _fetch_dumps(args)
     if args.command == "checkpoint":
         return _fetch_checkpoint(args)
     raise AssertionError(f"unexpected command: {args.command}")

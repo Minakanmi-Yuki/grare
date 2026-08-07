@@ -37,8 +37,13 @@ def test_detector_baseline_lambda_is_accepted() -> None:
     validate_config(_config(0.0))
 
 
-@pytest.mark.parametrize("bad_lambda", [0.25, 0.5, 0.75, 1.5, -1.0])
-def test_unreported_lambda_is_rejected(bad_lambda: float) -> None:
+@pytest.mark.parametrize("lambda_value", [0.2, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])
+def test_intermediate_lambda_is_accepted(lambda_value: float) -> None:
+    validate_config(_config(lambda_value))
+
+
+@pytest.mark.parametrize("bad_lambda", [-1.0, 1.5, float("nan"), float("inf")])
+def test_out_of_range_lambda_is_rejected(bad_lambda: float) -> None:
     with pytest.raises(ValueError, match="rerank.lambda"):
         validate_config(_config(bad_lambda))
 
@@ -80,3 +85,17 @@ def test_detector_baseline_does_not_overwrite_grare_artifacts() -> None:
     assert _value_after(evaluate, "--save-raw") != _value_after(
         _eval_command(reported), "--save-raw"
     )
+
+
+def test_intermediate_lambda_does_not_overwrite_reported_artifacts() -> None:
+    ablation = _config(0.2)
+    rerank = _rerank_command(ablation)
+    evaluate = _eval_command(ablation)
+
+    assert _value_after(rerank, "--output-root") == "/output/predictions/gn_realsense_lambda_0p2"
+    assert _value_after(evaluate, "--dump-folder") == "/output/predictions/gn_realsense_lambda_0p2"
+    assert _value_after(evaluate, "--save-raw") == (
+        "/output/evaluation/gn_realsense_lambda_0p2/per_scene_raw.npy"
+    )
+    assert _value_after(evaluate, "--tag") == "gn_realsense_lambda_0p2"
+    assert _value_after(rerank, "--rescoring-score-weight") == "0.2"

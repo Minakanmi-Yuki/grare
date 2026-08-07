@@ -5,12 +5,40 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import re
+import math
 from typing import Any
 
 import yaml
 
 
 _ENV_PATTERN = re.compile(r"\$\{([A-Z][A-Z0-9_]*)\}")
+
+
+# One GraRe configuration is released for every entry in this table. Keep the
+# detector/camera selection independent of a local asset-root layout so the
+# Hub downloader and the demo resolve exactly the same checkpoint.
+CONFIG_NAME_BY_SELECTION = {
+    ("graspnet_baseline", "realsense"): "gn_realsense",
+    ("graspnet_baseline", "kinect"): "gn_kinect",
+    ("scale_balanced_grasp", "realsense"): "sbg_realsense",
+    ("economicgrasp", "realsense"): "eg_realsense",
+    ("economicgrasp", "kinect"): "eg_kinect",
+    ("hggd", "realsense"): "hggd_realsense",
+    ("hggd", "kinect"): "hggd_kinect",
+    ("rngnet", "realsense"): "rngnet_realsense",
+    ("rngnet", "kinect"): "rngnet_kinect",
+}
+
+
+def config_name_for_selection(detector: str, camera: str) -> str:
+    """Return the released config name for one frozen-detector setting."""
+    name = CONFIG_NAME_BY_SELECTION.get((detector, camera))
+    if name is None:
+        raise ValueError(
+            f"no GraRe configuration is available for detector={detector!r}, "
+            f"camera={camera!r}"
+        )
+    return name
 
 
 def _deep_merge(base: dict[str, Any], update: dict[str, Any]) -> dict[str, Any]:
@@ -102,12 +130,9 @@ def validate_config(config: dict[str, Any]) -> None:
     if int(config["train"]["batch_size"]) != 2048:
         raise ValueError("the reported settings require train.batch_size=2048")
     # lambda=1.0 is the GraRe ranking; lambda=0.0 keeps the detector's own
-    # ranking and produces the detector baseline AP that docs/RESULTS.md
-    # compares against. Any other value is an unreported setting.
+    # ranking and produces the detector baseline AP that README compares
+    # against. Intermediate values are valid ablations and get their own
+    # rerank/evaluation artifact directories in grare-run.
     rerank_lambda = float(config["rerank"]["lambda"])
-    if rerank_lambda not in {0.0, 1.0}:
-        raise ValueError(
-            "the reported settings require rerank.lambda=1.0 (GraRe ranking) "
-            "or rerank.lambda=0.0 (detector baseline ranking); "
-            f"got {rerank_lambda}"
-        )
+    if not math.isfinite(rerank_lambda) or not 0.0 <= rerank_lambda <= 1.0:
+        raise ValueError(f"rerank.lambda must be a finite value in [0, 1]; got {rerank_lambda}")

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish completed GraRe feature shards or checkpoints to Hugging Face.
+"""Publish completed GraRe dumps, feature shards, or checkpoints to Hugging Face.
 
 This maintainer tool creates one uncompressed tar shard per five-scene group.
 The contained ``.npz`` files are already compressed, so tar reduces Hub file
@@ -57,6 +57,20 @@ def parse_args() -> argparse.Namespace:
     )
     features.add_argument("--dry-run", action="store_true")
 
+    dumps = subparsers.add_parser("dumps", help="Publish one frozen-detector dump tree.")
+    dumps.add_argument("--detector", required=True)
+    dumps.add_argument("--camera", required=True)
+    dumps.add_argument("--dump-root", default=os.environ.get("GRARE_DUMP_ROOT"))
+    dumps.add_argument("--repo-id", default=DEFAULT_DATASET_REPO)
+    dumps.add_argument("--scenes-per-shard", type=int, default=5, help="Scenes per tar shard (default: 5).")
+    dumps.add_argument(
+        "--uploads-per-commit",
+        type=int,
+        default=5,
+        help="Tar shards to send in each Hugging Face commit (default: 5).",
+    )
+    dumps.add_argument("--dry-run", action="store_true")
+
     checkpoint = subparsers.add_parser("checkpoint", help="Publish the best checkpoint for one config.")
     checkpoint.add_argument("--config", required=True)
     checkpoint.add_argument("--repo-id", default=DEFAULT_MODEL_REPO)
@@ -93,6 +107,7 @@ def _empty_index() -> dict[str, Any]:
         "schema_version": 1,
         "source_revision": _source_revision(),
         "feature_sets": {},
+        "dump_sets": {},
         "checkpoints": {},
     }
 
@@ -141,6 +156,7 @@ def _load_index(*, repo_id: str, repo_type: str, token: str) -> dict[str, Any]:
     if int(payload.get("schema_version", -1)) != 1:
         raise RuntimeError(f"unsupported remote index schema: {payload.get('schema_version')!r}")
     payload.setdefault("feature_sets", {})
+    payload.setdefault("dump_sets", {})
     payload.setdefault("checkpoints", {})
     return payload
 
@@ -241,6 +257,13 @@ def _stage_scene_paths(stage_root: Path, scenes: Iterable[Path]) -> Iterable[Pat
                 yield path
 
 
+def _dump_scene_paths(scenes: Iterable[Path], camera: str) -> Iterable[Path]:
+    for scene in scenes:
+        for path in sorted((scene / camera).rglob("*.npy")):
+            if path.is_file():
+                yield path
+
+
 def _feature_entry_index(
     index: dict[str, Any], *, detector: str, camera: str, data_root: Path
 ) -> dict[str, Any]:
@@ -261,6 +284,30 @@ def _feature_entry_index(
     for split in SPLITS:
         local_root = source_root / "local_cloud" / split
         entry["archive_counts"][split] = sum(1 for _ in local_root.rglob("*.npz"))
+    return entry
+
+
+def _dump_entry_index(
+    index: dict[str, Any], *, detector: str, camera: str, dump_root: Path
+) -> dict[str, Any]:
+    key = f"{detector}/{camera}"
+    entry = index["dump_sets"].setdefault(
+        key,
+        {
+            "detector": detector,
+            "camera": camera,
+            "frame_counts": {},
+            "shards": [],
+            "complete": False,
+        },
+    )
+    if entry.get("detector") != detector or entry.get("camera") != camera:
+        raise RuntimeError(f"remote index collision for {key}")
+    for split in SPLITS:
+        split_root = dump_root / detector / split
+        entry["frame_counts"][split] = sum(
+            1 for _ in split_root.glob(f"scene_*/{camera}/*.npy")
+        )
     return entry
 
 
@@ -314,6 +361,27 @@ def _publish_features(args: argparse.Namespace) -> int:
     feature_set = _feature_entry_index(
         index, detector=args.detector, camera=args.camera, data_root=data_root
     )
+    # Object clouds are intentionally removable after a verified upload because
+    # the frozen Point-MAE stage has already consumed them. A complete remote
+    # set is immutable, so do not require those reclaimed local intermediates
+    # when resuming the release queue.
+    if feature_set.get("complete") is True:
+        print(
+            json.dumps(
+                {
+                    "stage": "publish_features_done",
+                    "repo_id": args.repo_id,
+                    "detector": args.detector,
+                    "camera": args.camera,
+                    "archive_counts": feature_set["archive_counts"],
+                    "shards": len(feature_set["shards"]),
+                    "already_complete": True,
+                    "dry_run": bool(args.dry_run),
+                },
+                ensure_ascii=False,
+            )
+        )
+        return 0
     changed = False
     for stage in FEATURE_STAGES:
         for split in SPLITS:
@@ -421,6 +489,107 @@ def _publish_features(args: argparse.Namespace) -> int:
     return 0
 
 
+def _publish_dumps(args: argparse.Namespace) -> int:
+    if not args.dump_root:
+        raise SystemExit("--dump-root is required or GRARE_DUMP_ROOT must be set.")
+    if args.scenes_per_shard < 1:
+        raise SystemExit("--scenes-per-shard must be positive.")
+    if args.uploads_per_commit < 1:
+        raise SystemExit("--uploads-per-commit must be positive.")
+    dump_root = Path(args.dump_root).resolve()
+    source_root = dump_root / args.detector
+    if not source_root.is_dir():
+        raise FileNotFoundError(source_root)
+    token = _require_token()
+    api = HfApi(token=token)
+    index = _load_index(repo_id=args.repo_id, repo_type="dataset", token=token)
+    dump_set = _dump_entry_index(
+        index, detector=args.detector, camera=args.camera, dump_root=dump_root
+    )
+    if any(int(dump_set["frame_counts"][split]) == 0 for split in SPLITS):
+        raise RuntimeError(f"no {args.camera} dump frames found under {source_root}")
+    changed = False
+    for split in SPLITS:
+        split_root = source_root / split
+        scenes = sorted(
+            path for path in split_root.glob("scene_*") if (path / args.camera).is_dir()
+        )
+        if not scenes:
+            raise RuntimeError(f"no scenes found under {split_root} for camera={args.camera}")
+        with tempfile.TemporaryDirectory(prefix="grare-hf-") as temp_dir:
+            pending: list[tuple[Path, str, list[str]]] = []
+
+            def flush_pending() -> None:
+                nonlocal changed
+                if not pending:
+                    return
+                sources = [(path, remote_path) for path, remote_path, _ in pending]
+                artifacts = (
+                    _upload_files(
+                        api=api,
+                        sources=sources,
+                        repo_id=args.repo_id,
+                        repo_type="dataset",
+                        token=token,
+                    )
+                    if not args.dry_run
+                    else [
+                        {"path": remote_path, "size": path.stat().st_size, "sha256": _sha256(path)}
+                        for path, remote_path, _ in pending
+                    ]
+                )
+                for (_, _, scene_names), artifact in zip(pending, artifacts, strict=True):
+                    shard = {"stage": "dumps", "split": split, "scenes": scene_names, **artifact}
+                    changed = _upsert_shard(dump_set, shard) or changed
+                pending.clear()
+
+            for group in _scene_groups(scenes, args.scenes_per_shard):
+                first = group[0].name.removeprefix("scene_")
+                last = group[-1].name.removeprefix("scene_")
+                remote_path = (
+                    f"shards/v1/{args.detector}/{args.camera}/dumps/{split}/"
+                    f"scenes-{first}-{last}.tar"
+                )
+                scene_names = [scene.name for scene in group]
+                if _published_shard(dump_set, path=remote_path, scenes=scene_names):
+                    print(
+                        json.dumps({"stage": "already_published", "path": remote_path}, ensure_ascii=False),
+                        flush=True,
+                    )
+                    continue
+                print(json.dumps({"stage": "package", "path": remote_path}, ensure_ascii=False), flush=True)
+                shard_path = Path(temp_dir) / f"{len(pending):03d}.tar"
+                _create_tar(
+                    source_paths=_dump_scene_paths(group, args.camera),
+                    data_root=dump_root,
+                    destination=shard_path,
+                )
+                pending.append((shard_path, remote_path, scene_names))
+                if len(pending) == args.uploads_per_commit:
+                    flush_pending()
+            flush_pending()
+    if dump_set.get("complete") is not True:
+        dump_set["complete"] = True
+        changed = True
+    if changed and not args.dry_run:
+        _upload_index(api=api, repo_id=args.repo_id, repo_type="dataset", token=token, index=index)
+    print(
+        json.dumps(
+            {
+                "stage": "publish_dumps_done",
+                "repo_id": args.repo_id,
+                "detector": args.detector,
+                "camera": args.camera,
+                "frame_counts": dump_set["frame_counts"],
+                "shards": len(dump_set["shards"]),
+                "dry_run": bool(args.dry_run),
+            },
+            ensure_ascii=False,
+        )
+    )
+    return 0
+
+
 def _checkpoint_sources(output_root: Path, name: str) -> list[tuple[Path, str]]:
     candidates = [
         (output_root / "checkpoints" / name / "best.pt", f"checkpoints/{name}/best.pt"),
@@ -479,6 +648,8 @@ def main() -> int:
     args = parse_args()
     if args.command == "features":
         return _publish_features(args)
+    if args.command == "dumps":
+        return _publish_dumps(args)
     if args.command == "checkpoint":
         return _publish_checkpoint(args)
     raise AssertionError(f"unexpected command: {args.command}")

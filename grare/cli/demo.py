@@ -21,7 +21,7 @@ from typing import Any
 import numpy as np
 
 from grare.rescoring.inference import _build_export_scores, _strictly_descending
-from grare.config import load_config
+from grare.config import config_name_for_selection, load_config
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -34,17 +34,6 @@ DETECTORS = (
     "rngnet",
 )
 CAMERAS = ("realsense", "kinect")
-CONFIG_NAME_BY_SELECTION = {
-    ("graspnet_baseline", "realsense"): "gn_realsense",
-    ("graspnet_baseline", "kinect"): "gn_kinect",
-    ("scale_balanced_grasp", "realsense"): "sbg_realsense",
-    ("economicgrasp", "realsense"): "eg_realsense",
-    ("economicgrasp", "kinect"): "eg_kinect",
-    ("hggd", "realsense"): "hggd_realsense",
-    ("hggd", "kinect"): "hggd_kinect",
-    ("rngnet", "realsense"): "rngnet_realsense",
-    ("rngnet", "kinect"): "rngnet_kinect",
-}
 
 
 @dataclass(frozen=True)
@@ -147,13 +136,10 @@ def _required_path(value: str | None, *, env_name: str, option: str) -> Path:
 
 
 def _config_name_for(detector: str, camera: str) -> str:
-    name = CONFIG_NAME_BY_SELECTION.get((detector, camera))
-    if name is not None:
-        return name
-    raise SystemExit(
-        f"no GraRe configuration is available for detector={detector!r}, camera={camera!r}. "
-        "Select a detector/camera pair listed in the Train and Evaluate table."
-    )
+    try:
+        return config_name_for_selection(detector, camera)
+    except ValueError as exc:
+        raise SystemExit(f"{exc}. Select a detector/camera pair listed in the Train and Evaluate table.") from exc
 
 
 def _resolve_demo(args: argparse.Namespace) -> ResolvedDemo:

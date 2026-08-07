@@ -191,12 +191,13 @@ grare-feature --detector "$DETECTOR" --camera "$CAMERA"
 ```
 The resulting `local_cloud`, `object_cloud`, and `object_pooled` directories are the inputs for training.
 
-Published prepared features can instead be downloaded directly into the same
-location. Install the optional Hub client once, then use the same detector and
-camera arguments:
+Published dumps and prepared features can instead be downloaded directly into
+the same locations. Install the optional Hub client once, then use the same
+detector and camera arguments:
 
 ```bash
 python -m pip install -e '.[hub]'
+grare-fetch dumps --detector "$DETECTOR" --camera "$CAMERA"
 grare-fetch features --detector "$DETECTOR" --camera "$CAMERA"
 ```
 
@@ -226,11 +227,10 @@ HGGD and RNGNet publish RealSense and Kinect weights.
 Results are reported only after the corresponding official evaluation
 completes.
 
-Published GraRe checkpoints are currently available only for those five
-released configurations. To use one without retraining:
+To use the matching published GraRe checkpoint without retraining:
 
 ```bash
-grare-fetch checkpoint --config configs/gn_realsense.yaml
+grare-fetch checkpoint --detector graspnet_baseline --camera realsense
 ```
 
 ## Demo
