@@ -21,7 +21,6 @@ DETECTORS = (
     "economicgrasp",
     "hggd",
     "rngnet",
-    "generalizing_grasp",
 )
 CAMERAS = ("realsense", "kinect")
 SPLITS = ("train", "test")

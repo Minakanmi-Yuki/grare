@@ -95,7 +95,6 @@ def validate_config(config: dict[str, Any]) -> None:
         "economicgrasp",
         "hggd",
         "rngnet",
-        "generalizing_grasp",
     }:
         raise ValueError(f"unsupported detector: {config['detector']!r}")
     if config["camera"] not in {"realsense", "kinect"}:

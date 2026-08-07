@@ -7,8 +7,8 @@ usage() {
 Usage: ./scripts/check_downloaded_assets.sh [options]
 
 Verify GraspNet-1Billion, the MobileSAM and Point-MAE weights, and the five
-released detector checkpoints. Select HGGD, RNGNet, or Generalizing-Grasp
-explicitly with --detector to verify its optional checkpoint. --with-dumps
+released detector checkpoints. Select HGGD or RNGNet explicitly with
+--detector to verify its optional checkpoint. --with-dumps
 additionally verifies detector outputs. --with-features verifies the complete
 GraRe feature tree for one detector-camera setting.
 
@@ -249,13 +249,6 @@ check_selected_checkpoint() {
       ;;
     rngnet:kinect)
       check_file 'RNGNet Kinect checkpoint' "$detector_checkpoint_root/rngnet/kinect.pth"
-      ;;
-    generalizing_grasp:realsense)
-      check_file 'Generalizing-Grasp RealSense checkpoint' "$detector_checkpoint_root/generalizing_grasp/log_phy/checkpoint.tar"
-      ;;
-    generalizing_grasp:kinect)
-      printf 'UNSUPPORTED: Generalizing-Grasp publishes a RealSense checkpoint only.\n' >&2
-      failed=1
       ;;
     scale_balanced_grasp:kinect)
       printf 'UNSUPPORTED: Scale-Balanced-Grasp has no published Kinect checkpoint.\n' >&2

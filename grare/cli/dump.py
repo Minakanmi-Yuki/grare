@@ -38,10 +38,6 @@ from grare.detectors.economicgrasp_wrapper import (
     EconomicGraspConfig,
     EconomicGraspWrapper,
 )
-from grare.detectors.generalizing_grasp_wrapper import (
-    GeneralizingGraspConfig,
-    GeneralizingGraspWrapper,
-)
 from grare.detectors.graspnet_baseline_wrapper import (
     GraspNetBaselineConfig,
     GraspNetBaselineWrapper,
@@ -67,7 +63,6 @@ DETECTORS = (
     "economicgrasp",
     "hggd",
     "rngnet",
-    "generalizing_grasp",
 )
 CAMERAS = ("realsense", "kinect")
 SPLITS = ("train", "test")
@@ -81,7 +76,6 @@ DEFAULT_CKPT_BY_CAMERA = {
         "economicgrasp": "economicgrasp/economicgrasp_realsense.tar",
         "hggd": "hggd/HGGD_realsense_checkpoint",
         "rngnet": "rngnet/realsense.pth",
-        "generalizing_grasp": "generalizing_grasp/log_phy/checkpoint.tar",
     },
     "kinect": {
         "graspnet_baseline": "graspnet_baseline/checkpoint-kn.tar",
@@ -304,17 +298,6 @@ def _build_wrapper(args: argparse.Namespace, dataset_root: Path, ckpt: Path, rep
             **common_for(RNGNetConfig),
         )
         return RNGNetWrapper(config, **wrapper_kwargs)
-
-    if args.detector == "generalizing_grasp":
-        config = GeneralizingGraspConfig(
-            batch_size=_configured(args.batch_size, GeneralizingGraspConfig, "batch_size"),
-            data_workers=_configured(args.data_workers, GeneralizingGraspConfig, "data_workers"),
-            postprocess_workers=_configured(args.postprocess_workers, GeneralizingGraspConfig, "postprocess_workers"),
-            index_shard_count=args.index_shard_count,
-            index_shard_id=args.index_shard_id,
-            **common_for(GeneralizingGraspConfig),
-        )
-        return GeneralizingGraspWrapper(config, **wrapper_kwargs)
 
     config = EconomicGraspConfig(
         batch_size=_configured(args.batch_size, EconomicGraspConfig, "batch_size"),

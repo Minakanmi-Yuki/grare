@@ -13,8 +13,6 @@ from grare.candidates import (
 from grare.detectors import (
     EconomicGraspConfig,
     EconomicGraspWrapper,
-    GeneralizingGraspConfig,
-    GeneralizingGraspWrapper,
     GraspNetBaselineConfig,
     GraspNetBaselineWrapper,
     HGGDConfig,
@@ -58,12 +56,6 @@ _CASES = [
         RNGNetConfig,
         "scripts/detectors/run_rngnet_split.py",
     ),
-    (
-        "generalizing_grasp",
-        GeneralizingGraspWrapper,
-        GeneralizingGraspConfig,
-        "scripts/detectors/run_generalizing_grasp_split.py",
-    ),
 ]
 
 
@@ -88,7 +80,7 @@ def test_wrapper_targets_an_adapter_that_exists(
     assert "--dataset_root" in command
     assert "--checkpoint_path" in command
     assert str(tmp_path / name / "test") in command
-    if name in {"hggd", "rngnet", "generalizing_grasp"}:
+    if name in {"hggd", "rngnet"}:
         assert command[command.index("--data_workers") + 1] == "8"
         assert command[command.index("--prefetch-factor") + 1] == "4"
 

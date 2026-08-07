@@ -46,7 +46,6 @@ def test_demo_selection_resolves_the_supported_configs_and_splits() -> None:
     assert _config_name_for("economicgrasp", "kinect") == "eg_kinect"
     assert _config_name_for("hggd", "realsense") == "hggd_realsense"
     assert _config_name_for("rngnet", "kinect") == "rngnet_kinect"
-    assert _config_name_for("generalizing_grasp", "realsense") == "generalizing_grasp_realsense"
     assert _parse_scene_id("scene_0100") == 100
     assert _split_for_scene(99) == "train"
     assert _split_for_scene(100) == "test"

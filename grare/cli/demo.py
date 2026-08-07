@@ -32,7 +32,6 @@ DETECTORS = (
     "economicgrasp",
     "hggd",
     "rngnet",
-    "generalizing_grasp",
 )
 CAMERAS = ("realsense", "kinect")
 CONFIG_NAME_BY_SELECTION = {
@@ -45,7 +44,6 @@ CONFIG_NAME_BY_SELECTION = {
     ("hggd", "kinect"): "hggd_kinect",
     ("rngnet", "realsense"): "rngnet_realsense",
     ("rngnet", "kinect"): "rngnet_kinect",
-    ("generalizing_grasp", "realsense"): "generalizing_grasp_realsense",
 }
 
 

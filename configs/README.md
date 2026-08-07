@@ -15,7 +15,6 @@ the additional upstream-detector configurations use the same GraRe workflow.
 | `hggd_kinect.yaml` | HGGD | Kinect | no |
 | `rngnet_realsense.yaml` | RNGNet | RealSense | no |
 | `rngnet_kinect.yaml` | RNGNet | Kinect | no |
-| `generalizing_grasp_realsense.yaml` | Generalizing-Grasp | RealSense | no |
 
 Run one configuration with:
 
