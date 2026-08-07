@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Evaluate the requested intermediate z-score fusion weights serially. Each
-# evaluation uses 24 CPU processes and resumes per-scene evaluator shards.
+# evaluation resumes per-scene evaluator shards.
 set -euo pipefail
 
 source "${GRARE_ASSET_WORKSPACE:-/root/autodl-tmp/grare-assets}/grare_paths.env"
@@ -10,7 +10,7 @@ export OPENBLAS_NUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1
 grare_run="${GRARE_RUN:-/root/miniconda3/envs/grare/bin/grare-run}"
 
-configs=(
+default_configs=(
   gn_realsense
   gn_kinect
   sbg_realsense
@@ -21,7 +21,24 @@ configs=(
   rngnet_realsense
   rngnet_kinect
 )
-lambdas=(0.2 0.4 0.5 0.6 0.7 0.8 0.9)
+default_lambdas=(0.2 0.4 0.5 0.6 0.7 0.8 0.9)
+
+# Space-separated overrides allow a long sweep to be split across queues.
+if [[ -n "${GRARE_LAMBDA_CONFIGS:-}" ]]; then
+  read -r -a configs <<< "${GRARE_LAMBDA_CONFIGS}"
+else
+  configs=("${default_configs[@]}")
+fi
+if [[ -n "${GRARE_LAMBDAS:-}" ]]; then
+  read -r -a lambdas <<< "${GRARE_LAMBDAS}"
+else
+  lambdas=("${default_lambdas[@]}")
+fi
+eval_proc="${GRARE_EVAL_PROC:-24}"
+if ! [[ "${eval_proc}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "GRARE_EVAL_PROC must be a positive integer, got: ${eval_proc}" >&2
+  exit 2
+fi
 
 for config in "${configs[@]}"; do
   for lambda in "${lambdas[@]}"; do
@@ -36,14 +53,14 @@ for config in "${configs[@]}"; do
       echo "[lambda] rerank ${config} lambda=${lambda}"
       "${grare_run}" --config "configs/${config}.yaml" \
         --set "rerank.lambda=${lambda}" \
-        --set eval.proc=24 \
+        --set "eval.proc=${eval_proc}" \
         --start-from rerank \
         --stop-after rerank
     fi
     echo "[lambda] eval ${config} lambda=${lambda}"
     "${grare_run}" --config "configs/${config}.yaml" \
       --set "rerank.lambda=${lambda}" \
-      --set eval.proc=24 \
+      --set "eval.proc=${eval_proc}" \
       --start-from eval \
       --stop-after eval
   done
