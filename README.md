@@ -109,11 +109,6 @@ Build the CUDA extensions and verify them:
 ./scripts/verify_detector_extensions.sh
 ```
 
-This additionally builds RNGNet's optional Cython module. HGGD has no native
-extension in its official release; its pure-PyTorch model sources are checked
-by the same scripts, and GraRe's adapter supplies the compatibility path used
-for dump inference.
-
 ## Downloads
 
 GraRe requires the GraspNet-1Billion dataset, detector checkpoints,
@@ -243,28 +238,15 @@ grare-fetch checkpoint --detector graspnet_baseline --camera realsense
 The demo follows the single-frame RGB-D workflow of the
 [GraspNet-Baseline demo](https://github.com/graspnet/graspnet-baseline/blob/main/demo.py).
 
-<!-- Temporary: the SBG and EG cells reuse GN previews until their matching demo checkpoints are available. -->
 <table>
-  <thead>
-    <tr>
-      <th></th>
-      <th>GraspNet-Baseline</th>
-      <th>Scale-Balanced-Grasp</th>
-      <th>EconomicGrasp</th>
-    </tr>
-  </thead>
   <tbody>
     <tr>
-      <th>Detector</th>
       <td><img src="assets/demo/demo_detector.png" alt="GraspNet-Baseline detector preview" width="280"></td>
-      <td><img src="assets/demo/demo_detector.png" alt="Scale-Balanced-Grasp detector preview placeholder" width="280"></td>
-      <td><img src="assets/demo/demo_detector.png" alt="EconomicGrasp detector preview placeholder" width="280"></td>
+      <td><img src="assets/demo/demo_grare.png" alt="GraspNet-Baseline GraRe preview" width="280"></td>
     </tr>
     <tr>
+      <th>Detector</th>
       <th>GraRe</th>
-      <td><img src="assets/demo/demo_grare.png" alt="GraspNet-Baseline GraRe preview" width="280"></td>
-      <td><img src="assets/demo/demo_grare.png" alt="Scale-Balanced-Grasp GraRe preview placeholder" width="280"></td>
-      <td><img src="assets/demo/demo_grare.png" alt="EconomicGrasp GraRe preview placeholder" width="280"></td>
     </tr>
   </tbody>
 </table>
@@ -293,13 +275,20 @@ corresponding detector-only or GraRe run has not completed.
 | HGGD | Kinect | 60.43 / **64.84** | 46.74 / **49.85** | 19.23 / **19.45** | 42.13 / **44.71** |
 | RNGNet | Kinect | 73.50 / **74.84** | 59.20 / **59.33** | 26.44 / **25.01** | 53.05 / **53.06** |
 
+![GraRe AP versus score-fusion lambda](assets/results/lambda_sweep_2x3.png)
+
+Rows separate RealSense and Kinect, while columns show Seen, Similar, and
+Novel AP. Each curve is a detector, and the AP axis uses a logarithmic scale;
+SBG has no Kinect result. The curves use
+the reported detector-only (`lambda=0`) and GraRe (`lambda=1`) endpoints, and
+intermediate points are shown only after their official evaluation has
+completed.
+
 ## Computational Cost
 
 Training was performed on a system with one NVIDIA GeForce RTX 5090 GPU
 (32 GiB VRAM) and an Intel Xeon Platinum 8470Q CPU.
 
-VRAM is the stable `nvidia-smi` reading after a one-minute warm-up with the
-configured training workload.
 
 | Frozen detector | Ranking | Camera | Time | VRAM |
 | --- | --- | --- | ---: | ---: |
@@ -310,4 +299,5 @@ configured training workload.
 | EconomicGrasp | GraRe | Kinect | 7 h 44 min | 5.81 GiB |
 | HGGD | GraRe | RealSense | 33 min | 9.22 GiB |
 | HGGD | GraRe | Kinect | 1 h 12 min | 9.22 GiB |
+| RNGNet | GraRe | RealSense | 40 min | 19.45 GiB |
 | RNGNet | GraRe | Kinect | 1 h 9 min | 5.81 GiB |
