@@ -231,9 +231,8 @@ HGGD and RNGNet publish RealSense and Kinect weights. Generalizing-Grasp
 publishes a RealSense checkpoint; its upstream evaluator uses fused scene
 clouds, while GraRe's adapter runs the released frozen model per original
 RGB-D frame so that it follows the same preparation and evaluation contract.
-Only the five configurations in the Results table below are released numerical
-reproductions; newly added detectors require their own completed evaluation
-before reporting metrics.
+Results are reported only after the corresponding official evaluation
+completes.
 
 Published GraRe checkpoints are currently available only for those five
 released configurations. To use one without retraining:
@@ -283,21 +282,20 @@ grare-demo --detector graspnet_baseline --camera realsense --scene 0100 --frame 
 ## Results
 The following offline GraspNet-1Billion results use the official evaluation protocol.
 Each metric is reported as `Detector / GraRe`; `N/A` indicates that the
-detector-only baseline has not yet been evaluated independently.
+corresponding detector-only or GraRe run has not completed.
 
 | Frozen detector | Camera | Seen | Similar | Novel | Average |
 | --- | --- | ---: | ---: | ---: | ---: |
 | GraspNet-Baseline | RealSense | 47.83 / **64.16** | 42.79 / **58.47** | 16.94 / **25.31** | 35.85 / **49.32** |
 | Scale-Balanced-Grasp | RealSense | 62.27 / **68.54** | 56.92 / **62.34** | 23.80 / **27.32** | 47.66 / **52.73** |
 | EconomicGrasp | RealSense | 69.30 / **74.90** | 61.50 / **64.51** | 25.28 / **28.16** | 52.02 / **55.85** |
-| HGGD | RealSense | N/A / **67.11** | N/A / **54.92** | N/A / **25.49** | N/A / **49.17** |
-| RNGNet | Kinect | N/A / **74.84** | N/A / **59.33** | N/A / **25.01** | N/A / **53.06** |
+| HGGD | RealSense | 63.37 / **67.11** | 52.28 / **54.92** | 23.83 / **25.49** | 46.49 / **49.17** |
+| RNGNet | RealSense | 75.32 / **77.38** | 66.95 / **68.30** | 32.03 / **31.16** | 58.10 / **58.95** |
+| Generalizing-Grasp | RealSense | 19.03 / N/A | 18.42 / N/A | 6.53 / N/A | 14.66 / N/A |
 | GraspNet-Baseline | Kinect | 41.97 / **53.94** | 37.56 / **46.20** | 12.24 / **15.92** | 30.59 / **38.69** |
 | EconomicGrasp | Kinect | 63.75 / **69.55** | 52.43 / **56.78** | 19.61 / **22.44** | 45.26 / **49.59** |
-| HGGD | Kinect | N/A / **63.10** | N/A / **47.70** | N/A / **19.72** | N/A / **43.51** |
-
-The HGGD Kinect row will be refreshed after its queued GN-aligned retraining
-and evaluation complete.
+| HGGD | Kinect | 60.43 / **64.84** | 46.74 / **49.85** | 19.23 / **19.45** | 42.13 / **44.71** |
+| RNGNet | Kinect | 73.50 / **74.84** | 59.20 / **59.33** | 26.44 / **25.01** | 53.05 / **53.06** |
 
 ## Computational Cost
 
@@ -315,7 +313,5 @@ configured training workload.
 | EconomicGrasp | GraRe | RealSense | 4 h 34 min | 5.81 GiB |
 | EconomicGrasp | GraRe | Kinect | 7 h 44 min | 5.81 GiB |
 | HGGD | GraRe | RealSense | 33 min | 9.22 GiB |
-| HGGD | GraRe | Kinect | 18 min (pre-alignment) | 9.22 GiB |
+| HGGD | GraRe | Kinect | 1 h 12 min | 9.22 GiB |
 | RNGNet | GraRe | Kinect | 1 h 9 min | 5.81 GiB |
-
-The HGGD Kinect cost row will be refreshed after its queued GN-aligned run.
