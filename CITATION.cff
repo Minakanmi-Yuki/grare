@@ -1,0 +1,44 @@
+cff-version: 1.2.0
+message: "If you use GraRe, please cite the accompanying paper."
+type: software
+title: "GraRe: Grasp Candidate Re-Ranking for Frozen 6-DoF Grasp Detectors"
+abstract: "A plug-and-play grasp candidate re-ranking method for frozen 6-DoF grasp detectors."
+license: MIT
+repository-code: "https://github.com/Minakanmi-Yuki/grare"
+url: "https://arxiv.org/abs/2608.00946"
+authors:
+  - family-names: Yuan
+    given-names: Jibao
+  - family-names: Zhao
+    given-names: Yuhui
+  - family-names: Lv
+    given-names: Yinzhen
+  - family-names: Xu
+    given-names: Chao
+  - family-names: Li
+    given-names: Shun
+  - family-names: Deng
+    given-names: Chenxi
+  - family-names: Chen
+    given-names: Shaofei
+preferred-citation:
+  type: article
+  title: "GraRe: Grasp Candidate Re-Ranking for Frozen 6-DoF Grasp Detectors"
+  authors:
+    - family-names: Yuan
+      given-names: Jibao
+    - family-names: Zhao
+      given-names: Yuhui
+    - family-names: Lv
+      given-names: Yinzhen
+    - family-names: Xu
+      given-names: Chao
+    - family-names: Li
+      given-names: Shun
+    - family-names: Deng
+      given-names: Chenxi
+    - family-names: Chen
+      given-names: Shaofei
+  journal: "arXiv preprint arXiv:2608.00946"
+  year: 2026
+  url: "https://arxiv.org/abs/2608.00946"
