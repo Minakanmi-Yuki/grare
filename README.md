@@ -1,21 +1,17 @@
 # GraRe: Grasp Candidate Re-Ranking for Frozen 6-DoF Grasp Detectors
 
 <p align="center">
-  Jibao Yuan · Yuhui Zhao · Yinzhen Lv · Chao Xu · Shun Li · Chenxi Deng · Shaofei Chen*
-</p>
-
-<p align="center">
-  <a href="https://arxiv.org/abs/2608.00946"><img src="https://img.shields.io/badge/Paper-arXiv%3A2608.00946-b31b1b?style=flat&logo=arxiv" alt="Paper: arXiv:2608.00946"></a>
+  <a href="https://arxiv.org/abs/2608.00946"><img src="assets/badges/paper-arxiv.svg" alt="Paper: arXiv:2608.00946"></a>
   ·
-  <a href="https://huggingface.co/jibaoyuan/grare-graspnet"><img src="https://img.shields.io/badge/Model-Hugging%20Face-FFD21E?style=flat&logo=huggingface&logoColor=black" alt="GraRe model on Hugging Face"></a>
+  <a href="https://huggingface.co/jibaoyuan/grare-graspnet"><img src="assets/badges/model-huggingface.svg" alt="GraRe model on Hugging Face"></a>
   ·
-  <a href="https://huggingface.co/datasets/jibaoyuan/grare-graspnet"><img src="https://img.shields.io/badge/Dataset-Hugging%20Face-FFD21E?style=flat&logo=huggingface&logoColor=black" alt="GraRe dataset on Hugging Face"></a>
+  <a href="https://huggingface.co/datasets/jibaoyuan/grare-graspnet"><img src="assets/badges/dataset-huggingface.svg" alt="GraRe dataset on Hugging Face"></a>
   ·
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License"></a>
+  <a href="LICENSE"><img src="assets/badges/license-mit.svg" alt="MIT License"></a>
   ·
-  <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-%3E%3D3.10-3776AB?logo=python&logoColor=white" alt="Python version 3.10 or newer"></a>
+  <a href="pyproject.toml"><img src="assets/badges/python-3.10.svg" alt="Python version 3.10 or newer"></a>
   ·
-  <a href="#citation"><img src="https://img.shields.io/badge/Cite-BibTeX-green.svg" alt="BibTeX citation"></a>
+  <a href="#citation"><img src="assets/badges/cite-bibtex.svg" alt="BibTeX citation"></a>
 </p>
 
 ## Abstract
@@ -275,7 +271,7 @@ Each metric is reported as `Detector / GraRe`.
 | Detector | Camera | λ | Seen | Similar | Novel | Average |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
 | GraspNet-Baseline | RealSense | 1.0 | 47.83 / **64.16** | 42.79 / **58.47** | 16.94 / **25.31** | 35.85 / **49.32** |
-| Scale-Balanced-Grasp | RealSense | 0.9 | 62.27 / **68.67** | 56.92 / **62.62** | 23.80 / **27.30** | 47.66 / **52.86** |
+| ScaleBalancedGrasp | RealSense | 0.9 | 62.27 / **68.67** | 56.92 / **62.62** | 23.80 / **27.30** | 47.66 / **52.86** |
 | EconomicGrasp | RealSense | 0.9 | 69.30 / **75.18** | 61.50 / **65.05** | 25.28 / **28.14** | 52.02 / **56.12** |
 | HGGD | RealSense | 0.8 | 63.37 / **67.38** | 52.28 / **55.26** | 23.83 / **25.72** | 46.49 / **49.45** |
 | RNGNet | RealSense | 0.5 | 75.32 / **77.73** | 66.95 / **69.52** | 32.03 / **32.50** | 58.10 / **59.92** |
