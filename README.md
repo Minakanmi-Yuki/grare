@@ -270,13 +270,13 @@ Each metric is reported as `Detector / GraRe`.
 
 | Detector | Camera | λ | Seen | Similar | Novel | Average |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| GraspNet-Baseline | RealSense | 1.0 | <small>47.83 / <strong>64.16</strong></small> | <small>42.79 / <strong>58.47</strong></small> | <small>16.94 / <strong>25.31</strong></small> | <small>35.85 / <strong>49.32</strong></small> |
-| ScaleBalancedGrasp | RealSense | 0.9 | <small>62.27 / <strong>68.67</strong></small> | <small>56.92 / <strong>62.62</strong></small> | <small>23.80 / <strong>27.30</strong></small> | <small>47.66 / <strong>52.86</strong></small> |
-| EconomicGrasp | RealSense | 0.9 | <small>69.30 / <strong>75.18</strong></small> | <small>61.50 / <strong>65.05</strong></small> | <small>25.28 / <strong>28.14</strong></small> | <small>52.02 / <strong>56.12</strong></small> |
+| GN | RealSense | 1.0 | <small>47.83 / <strong>64.16</strong></small> | <small>42.79 / <strong>58.47</strong></small> | <small>16.94 / <strong>25.31</strong></small> | <small>35.85 / <strong>49.32</strong></small> |
+| SBG | RealSense | 0.9 | <small>62.27 / <strong>68.67</strong></small> | <small>56.92 / <strong>62.62</strong></small> | <small>23.80 / <strong>27.30</strong></small> | <small>47.66 / <strong>52.86</strong></small> |
+| EG | RealSense | 0.9 | <small>69.30 / <strong>75.18</strong></small> | <small>61.50 / <strong>65.05</strong></small> | <small>25.28 / <strong>28.14</strong></small> | <small>52.02 / <strong>56.12</strong></small> |
 | HGGD | RealSense | 0.8 | <small>63.37 / <strong>67.38</strong></small> | <small>52.28 / <strong>55.26</strong></small> | <small>23.83 / <strong>25.72</strong></small> | <small>46.49 / <strong>49.45</strong></small> |
 | RNGNet | RealSense | 0.5 | <small>75.32 / <strong>77.73</strong></small> | <small>66.95 / <strong>69.52</strong></small> | <small>32.03 / <strong>32.50</strong></small> | <small>58.10 / <strong>59.92</strong></small> |
-| GraspNet-Baseline | Kinect | 0.9 | <small>41.97 / <strong>53.92</strong></small> | <small>37.56 / <strong>46.32</strong></small> | <small>12.24 / <strong>15.95</strong></small> | <small>30.59 / <strong>38.73</strong></small> |
-| EconomicGrasp | Kinect | 0.9 | <small>63.75 / <strong>69.78</strong></small> | <small>52.43 / <strong>57.23</strong></small> | <small>19.61 / <strong>22.41</strong></small> | <small>45.26 / <strong>49.81</strong></small> |
+| GN | Kinect | 0.9 | <small>41.97 / <strong>53.92</strong></small> | <small>37.56 / <strong>46.32</strong></small> | <small>12.24 / <strong>15.95</strong></small> | <small>30.59 / <strong>38.73</strong></small> |
+| EG | Kinect | 0.9 | <small>63.75 / <strong>69.78</strong></small> | <small>52.43 / <strong>57.23</strong></small> | <small>19.61 / <strong>22.41</strong></small> | <small>45.26 / <strong>49.81</strong></small> |
 | HGGD | Kinect | 0.8 | <small>60.43 / <strong>64.95</strong></small> | <small>46.74 / <strong>50.03</strong></small> | <small>19.23 / <strong>19.85</strong></small> | <small>42.13 / <strong>44.94</strong></small> |
 | RNGNet | Kinect | 0.4 | <small>73.50 / <strong>75.37</strong></small> | <small>59.20 / <strong>60.66</strong></small> | <small>26.44 / <strong>26.46</strong></small> | <small>53.05 / <strong>54.16</strong></small> |
 
