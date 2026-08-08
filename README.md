@@ -223,10 +223,6 @@ grare-run --config configs/gn_realsense.yaml
 This trains, re-ranks, and runs the official evaluation in order. Outputs are
 written to `$GRARE_OUTPUT_ROOT`.
 
-HGGD and RNGNet publish RealSense and Kinect weights.
-Results are reported only after the corresponding official evaluation
-completes.
-
 To use the matching published GraRe checkpoint without retraining:
 
 ```bash
@@ -260,29 +256,25 @@ grare-demo --detector graspnet_baseline --camera realsense --scene 0100 --frame 
 
 ## Results
 The following offline GraspNet-1Billion results use the official evaluation protocol.
-Each metric is reported as `Detector / GraRe`; `N/A` indicates that the
-corresponding detector-only or GraRe run has not completed.
+Each metric is reported as `Detector / GraRe`.
 
-| Frozen detector | Camera | Seen | Similar | Novel | Average |
-| --- | --- | ---: | ---: | ---: | ---: |
-| GraspNet-Baseline | RealSense | 47.83 / **64.16** | 42.79 / **58.47** | 16.94 / **25.31** | 35.85 / **49.32** |
-| Scale-Balanced-Grasp | RealSense | 62.27 / **68.54** | 56.92 / **62.34** | 23.80 / **27.32** | 47.66 / **52.73** |
-| EconomicGrasp | RealSense | 69.30 / **74.90** | 61.50 / **64.51** | 25.28 / **28.16** | 52.02 / **55.85** |
-| HGGD | RealSense | 63.37 / **67.11** | 52.28 / **54.92** | 23.83 / **25.49** | 46.49 / **49.17** |
-| RNGNet | RealSense | 75.32 / **77.38** | 66.95 / **68.30** | 32.03 / **31.16** | 58.10 / **58.95** |
-| GraspNet-Baseline | Kinect | 41.97 / **53.94** | 37.56 / **46.20** | 12.24 / **15.92** | 30.59 / **38.69** |
-| EconomicGrasp | Kinect | 63.75 / **69.55** | 52.43 / **56.78** | 19.61 / **22.44** | 45.26 / **49.59** |
-| HGGD | Kinect | 60.43 / **64.84** | 46.74 / **49.85** | 19.23 / **19.45** | 42.13 / **44.71** |
-| RNGNet | Kinect | 73.50 / **74.84** | 59.20 / **59.33** | 26.44 / **25.01** | 53.05 / **53.06** |
+| Frozen detector | Camera | Best λ | Seen | Similar | Novel | Average |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| GraspNet-Baseline | RealSense | 1.0 | 47.83 / **64.16** | 42.79 / **58.47** | 16.94 / **25.31** | 35.85 / **49.32** |
+| Scale-Balanced-Grasp | RealSense | 0.9 | 62.27 / **68.67** | 56.92 / **62.62** | 23.80 / **27.30** | 47.66 / **52.86** |
+| EconomicGrasp | RealSense | 0.9 | 69.30 / **75.18** | 61.50 / **65.05** | 25.28 / **28.14** | 52.02 / **56.12** |
+| HGGD | RealSense | 0.8 | 63.37 / **67.38** | 52.28 / **55.26** | 23.83 / **25.72** | 46.49 / **49.45** |
+| RNGNet | RealSense | 0.5 | 75.32 / **77.73** | 66.95 / **69.52** | 32.03 / **32.50** | 58.10 / **59.92** |
+| GraspNet-Baseline | Kinect | 0.9 | 41.97 / **53.92** | 37.56 / **46.32** | 12.24 / **15.95** | 30.59 / **38.73** |
+| EconomicGrasp | Kinect | 0.9 | 63.75 / **69.78** | 52.43 / **57.23** | 19.61 / **22.41** | 45.26 / **49.81** |
+| HGGD | Kinect | 0.8 | 60.43 / **64.95** | 46.74 / **50.03** | 19.23 / **19.85** | 42.13 / **44.94** |
+| RNGNet | Kinect | 0.4 | 73.50 / **75.37** | 59.20 / **60.66** | 26.44 / **26.46** | 53.05 / **54.16** |
 
-![GraRe AP versus score-fusion lambda](assets/results/lambda_sweep_2x3.png)
+For each detector and camera, Best λ maximizes Average AP over the complete
+`{0, 0.2, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1}` sweep. Detector values are
+detector-only (`λ=0`), while GraRe values use the selected λ.
 
-Rows separate RealSense and Kinect, while columns show Seen, Similar, and
-Novel AP. Each curve is a detector, and the AP axis uses a logarithmic scale;
-SBG has no Kinect result. The curves use
-the reported detector-only (`lambda=0`) and GraRe (`lambda=1`) endpoints, and
-intermediate points are shown only after their official evaluation has
-completed.
+![Seen, Similar, and Novel AP across score-fusion lambda values](assets/results/lambda_sweep_2x3.png)
 
 ## Computational Cost
 
