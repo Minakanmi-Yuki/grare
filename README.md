@@ -14,6 +14,12 @@
   <a href="#citation"><img src="assets/badges/cite-bibtex.svg" alt="BibTeX citation"></a>
 </p>
 
+<p align="center">
+  <img src="assets/demo/real_robot_case_1.gif" alt="Real-robot case 1" width="31%" />
+  <img src="assets/demo/real_robot_case_2.gif" alt="Real-robot case 2" width="31%" />
+  <img src="assets/demo/real_robot_case_3.gif" alt="Real-robot case 3" width="31%" />
+</p>
+
 ## Abstract
 
 Existing 6-DoF grasp detectors typically rank grasp candidates by detector
