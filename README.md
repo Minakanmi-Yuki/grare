@@ -253,8 +253,8 @@ The demo follows the single-frame RGB-D workflow of the
 <table align="center">
   <tbody>
     <tr>
-      <td align="center"><img src="assets/demo/demo_detector.png" alt="GraspNet-Baseline detector preview" width="280"></td>
-      <td align="center"><img src="assets/demo/demo_grare.png" alt="GraspNet-Baseline GraRe preview" width="280"></td>
+      <td align="center"><img src="assets/demo/demo_detector.gif" alt="GraspNet-Baseline detector animation across scene 0100 frames 0000–0255" width="280"></td>
+      <td align="center"><img src="assets/demo/demo_grare.gif" alt="GraRe animation across scene 0100 frames 0000–0255" width="280"></td>
     </tr>
     <tr>
       <th align="center">Detector</th>
