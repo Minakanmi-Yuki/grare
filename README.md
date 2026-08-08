@@ -4,6 +4,10 @@
   Jibao Yuan · Yuhui Zhao · Yinzhen Lv · Chao Xu · Shun Li · Chenxi Deng · Shaofei Chen*
 </p>
 
+<p align="center">
+  <a href="https://arxiv.org/abs/2608.00946">Paper: arXiv:2608.00946</a>
+</p>
+
 ## Abstract
 
 Existing 6-DoF grasp detectors typically rank grasp candidates by detector
@@ -234,15 +238,15 @@ grare-fetch checkpoint --detector graspnet_baseline --camera realsense
 The demo follows the single-frame RGB-D workflow of the
 [GraspNet-Baseline demo](https://github.com/graspnet/graspnet-baseline/blob/main/demo.py).
 
-<table>
+<table align="center">
   <tbody>
     <tr>
-      <td><img src="assets/demo/demo_detector.png" alt="GraspNet-Baseline detector preview" width="280"></td>
-      <td><img src="assets/demo/demo_grare.png" alt="GraspNet-Baseline GraRe preview" width="280"></td>
+      <td align="center"><img src="assets/demo/demo_detector.png" alt="GraspNet-Baseline detector preview" width="280"></td>
+      <td align="center"><img src="assets/demo/demo_grare.png" alt="GraspNet-Baseline GraRe preview" width="280"></td>
     </tr>
     <tr>
-      <th>Detector</th>
-      <th>GraRe</th>
+      <th align="center">Detector</th>
+      <th align="center">GraRe</th>
     </tr>
   </tbody>
 </table>
@@ -289,3 +293,16 @@ Training was performed on a system with one NVIDIA GeForce RTX 5090 GPU
 | HGGD | GraRe | Kinect | 1 h 12 min | 9.22 GiB |
 | RNGNet | GraRe | RealSense | 40 min | 19.45 GiB |
 | RNGNet | GraRe | Kinect | 1 h 9 min | 5.81 GiB |
+
+## Citation
+
+```bibtex
+@article{yuan2026grare,
+  title   = {GraRe: Grasp Candidate Re-Ranking for Frozen 6-DoF Grasp Detectors},
+  author  = {Yuan, Jibao and Zhao, Yuhui and Lv, Yinzhen and Xu, Chao and
+             Li, Shun and Deng, Chenxi and Chen, Shaofei},
+  journal = {arXiv preprint arXiv:2608.00946},
+  year    = {2026},
+  url     = {https://arxiv.org/abs/2608.00946}
+}
+```
