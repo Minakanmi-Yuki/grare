@@ -258,7 +258,7 @@ grare-demo --detector graspnet_baseline --camera realsense --scene 0100 --frame 
 The following offline GraspNet-1Billion results use the official evaluation protocol.
 Each metric is reported as `Detector / GraRe`.
 
-| Frozen detector | Camera | Best λ | Seen | Similar | Novel | Average |
+| Frozen detector | Camera | λ | Seen | Similar | Novel | Average |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
 | GraspNet-Baseline | RealSense | 1.0 | 47.83 / **64.16** | 42.79 / **58.47** | 16.94 / **25.31** | 35.85 / **49.32** |
 | Scale-Balanced-Grasp | RealSense | 0.9 | 62.27 / **68.67** | 56.92 / **62.62** | 23.80 / **27.30** | 47.66 / **52.86** |
@@ -270,8 +270,8 @@ Each metric is reported as `Detector / GraRe`.
 | HGGD | Kinect | 0.8 | 60.43 / **64.95** | 46.74 / **50.03** | 19.23 / **19.85** | 42.13 / **44.94** |
 | RNGNet | Kinect | 0.4 | 73.50 / **75.37** | 59.20 / **60.66** | 26.44 / **26.46** | 53.05 / **54.16** |
 
-For each detector and camera, Best λ maximizes Average AP over the complete
-`{0, 0.2, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1}` sweep. Detector values are
+For each detector and camera, λ is selected by maximizing Average AP over the
+complete `{0, 0.2, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1}` sweep. Detector values are
 detector-only (`λ=0`), while GraRe values use the selected λ.
 
 ![Seen, Similar, and Novel AP across score-fusion lambda values](assets/results/lambda_sweep_2x3.png)
