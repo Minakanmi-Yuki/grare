@@ -15,9 +15,9 @@
 </p>
 
 <p align="center">
-  <img src="assets/demo/real_robot_case_1.gif" alt="Real-robot case 1" width="31%" />
-  <img src="assets/demo/real_robot_case_2.gif" alt="Real-robot case 2" width="31%" />
-  <img src="assets/demo/real_robot_case_3.gif" alt="Real-robot case 3" width="31%" />
+  <video src="assets/demo/real_robot_case_1.mp4" autoplay loop muted playsinline width="31%"></video>
+  <video src="assets/demo/real_robot_case_2.mp4" autoplay loop muted playsinline width="31%"></video>
+  <video src="assets/demo/real_robot_case_3.mp4" autoplay loop muted playsinline width="31%"></video>
 </p>
 
 ## Abstract
