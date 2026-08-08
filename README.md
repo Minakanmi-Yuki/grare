@@ -10,6 +10,12 @@
   <a href="https://huggingface.co/jibaoyuan/grare-graspnet"><img src="https://img.shields.io/badge/Model-Hugging%20Face-FFD21E?style=flat&logo=huggingface&logoColor=black" alt="GraRe model on Hugging Face"></a>
   ·
   <a href="https://huggingface.co/datasets/jibaoyuan/grare-graspnet"><img src="https://img.shields.io/badge/Dataset-Hugging%20Face-FFD21E?style=flat&logo=huggingface&logoColor=black" alt="GraRe dataset on Hugging Face"></a>
+  ·
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License"></a>
+  ·
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-%3E%3D3.10-3776AB?logo=python&logoColor=white" alt="Python version 3.10 or newer"></a>
+  ·
+  <a href="#citation"><img src="https://img.shields.io/badge/Cite-BibTeX-green.svg" alt="BibTeX citation"></a>
 </p>
 
 ## Abstract
