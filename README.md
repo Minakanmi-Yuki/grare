@@ -5,7 +5,11 @@
 </p>
 
 <p align="center">
-  <a href="https://arxiv.org/abs/2608.00946">Paper: arXiv:2608.00946</a>
+  <a href="https://arxiv.org/abs/2608.00946"><img src="https://img.shields.io/badge/Paper-arXiv%3A2608.00946-b31b1b?style=flat&logo=arxiv" alt="Paper: arXiv:2608.00946"></a>
+  ·
+  <a href="https://huggingface.co/jibaoyuan/grare-graspnet"><img src="https://img.shields.io/badge/Model-Hugging%20Face-FFD21E?style=flat&logo=huggingface&logoColor=black" alt="GraRe model on Hugging Face"></a>
+  ·
+  <a href="https://huggingface.co/datasets/jibaoyuan/grare-graspnet"><img src="https://img.shields.io/badge/Dataset-Hugging%20Face-FFD21E?style=flat&logo=huggingface&logoColor=black" alt="GraRe dataset on Hugging Face"></a>
 </p>
 
 ## Abstract
