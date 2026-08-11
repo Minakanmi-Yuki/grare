@@ -73,14 +73,7 @@ python -m pip install --upgrade pip
 python -m pip install \
   --index-url https://download.pytorch.org/whl/cu130 \
   torch==2.12.1+cu130 torchvision==0.27.1+cu130
-python -m pip install -e '.[test,detectors]'
-```
-
-Verify the installation:
-
-```bash
-grare-smoke
-python -m pytest -q
+python -m pip install -e '.[test,detectors,hub]'
 ```
 
 Feature preparation and official AP evaluation additionally require the
@@ -96,6 +89,13 @@ python -m pip install -e ../MobileSAM
 
 python -m pip install grasp_nms
 python -m pip install -e '.[prepare]'
+```
+
+Verify the installation:
+
+```bash
+grare-smoke
+python -m pytest -q
 ```
 
 To generate frozen-detector grasp candidates, install the shared detector
@@ -267,8 +267,14 @@ After completing the corresponding workflow, run one GraspNet-1Billion frame
 (the detector can be any supported selection with a matching configuration):
 ```bash
 source "$GRARE_ASSET_WORKSPACE/grare_paths.env"
-grare-demo --detector graspnet_baseline --camera realsense --scene 0100 --frame 0000
+grare-demo --detector graspnet_baseline --camera realsense --scene 0100 --frame 0000 --show
 ```
+
+The `--show` option opens one interactive Open3D window. The left-upper button
+switches the gripper colors between Detector scores and GraRe scores; the
+grasp poses remain fixed, so the effect of re-ranking is visible directly in
+the color changes. The scene can still be rotated, zoomed, and panned with the
+mouse. Omit `--show` to only save the PLY assets.
 
 ## Results
 The following offline GraspNet-1Billion results use the official evaluation protocol.

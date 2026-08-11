@@ -9,6 +9,8 @@ from grare.cli.demo import (
     _build_pose_features,
     _config_name_for,
     _parse_scene_id,
+    _restore_original_candidate_order,
+    _score_color_values,
     _split_for_scene,
     rerank_candidates,
 )
@@ -62,6 +64,17 @@ def test_demo_reranking_preserves_candidates_and_replaces_only_score() -> None:
     assert np.all(reranked[:-1, 0] > reranked[1:, 0])
     assert summary["candidate_count"] == 3
     assert summary["top1_changed_vs_base"] is True
+
+
+def test_demo_score_toggle_restores_grare_scores_to_detector_pose_order() -> None:
+    detector = _grasps()
+    order = np.array([2, 0, 1], dtype=np.int64)
+    reranked = detector[order].copy()
+    reranked[:, 0] = [0.9, 0.8, 0.7]
+    restored = _restore_original_candidate_order(reranked, order)
+    assert np.array_equal(restored[:, 1:], detector[:, 1:])
+    assert np.allclose(restored[:, 0], [0.8, 0.7, 0.9])
+    assert np.allclose(_score_color_values(restored[:, 0]), [0.8, 0.7, 0.9])
 
 
 def test_online_feature_extractor_needs_no_graspnet_labels() -> None:

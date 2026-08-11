@@ -428,6 +428,75 @@ def _merge_gripper_meshes(grippers: list[Any]) -> Any:
     return merged
 
 
+def _restore_original_candidate_order(
+    reranked_grasps: np.ndarray,
+    original_indices: np.ndarray,
+) -> np.ndarray:
+    """Put a reranked ``(K, 17)`` array back in detector candidate order."""
+    reranked = np.asarray(reranked_grasps, dtype=np.float32)
+    indices = np.asarray(original_indices, dtype=np.int64)
+    if reranked.ndim != 2 or indices.shape != (len(reranked),):
+        raise ValueError("reranked_grasps and original_indices have incompatible shapes")
+    if len(reranked) and not np.array_equal(np.sort(indices), np.arange(len(reranked))):
+        raise ValueError("original_indices must be a permutation of candidate indices")
+    restored = np.empty_like(reranked)
+    restored[indices] = reranked
+    return restored
+
+
+def _score_color_values(scores: np.ndarray) -> np.ndarray:
+    """Return scores for GraspNet's native blue (low) to red (high) map."""
+    values = np.asarray(scores, dtype=np.float32)
+    if values.ndim != 1:
+        raise ValueError(f"scores must be one-dimensional, got {values.shape}")
+    if not len(values):
+        return np.empty((0,), dtype=np.float32)
+    finite = np.isfinite(values)
+    if not np.all(finite):
+        values = values.copy()
+        values[~finite] = 0.0
+    return values
+
+
+def _colored_gripper_mesh(grasps: np.ndarray) -> Any:
+    """Build one mesh whose vertex colors encode the supplied grasp scores."""
+    import open3d as o3d
+    from graspnetAPI import Grasp
+
+    array = np.asarray(grasps, dtype=np.float32)
+    scores = array[:, 0] if len(array) else np.empty((0,), dtype=np.float32)
+    colors = _score_color_values(scores)
+    mesh = o3d.geometry.TriangleMesh()
+    for grasp, color_value in zip(array, colors):
+        mesh += Grasp(grasp).to_open3d_geometry(
+            color=(float(color_value), 0.0, float(1.0 - color_value))
+        )
+    if len(mesh.vertices):
+        mesh.compute_vertex_normals()
+    return mesh
+
+
+def _selected_row_indices(source: np.ndarray, selected: np.ndarray) -> np.ndarray:
+    """Match selected detector rows to their original candidate indices.
+
+    The complete row is used so duplicate poses with different detector scores
+    remain distinguishable. Identical duplicate rows are interchangeable for
+    visualization and are consumed in source order.
+    """
+    source_array = np.ascontiguousarray(np.asarray(source, dtype=np.float32))
+    selected_array = np.ascontiguousarray(np.asarray(selected, dtype=np.float32))
+    buckets: dict[bytes, list[int]] = {}
+    for index, row in enumerate(source_array):
+        buckets.setdefault(row.tobytes(), []).append(index)
+    indices: list[int] = []
+    for row in selected_array:
+        matches = buckets.get(row.tobytes())
+        if not matches:
+            raise ValueError("failed to match a displayed grasp to the detector candidates")
+        indices.append(matches.pop(0))
+    return np.asarray(indices, dtype=np.int64)
+
+
 def save_open3d_assets(
     output_dir: Path,
     *,
@@ -456,21 +525,31 @@ def save_open3d_assets(
 
 OPEN3D_RENDER_WIDTH = 1280
 OPEN3D_RENDER_HEIGHT = 720
+OPEN3D_VIEW_WIDTH = OPEN3D_RENDER_WIDTH
+OPEN3D_VIEW_HEIGHT = OPEN3D_RENDER_HEIGHT
 
 
-def _configure_reference_camera(visualizer: Any, frame: DemoFrame) -> None:
-    """Use the RGB-D camera as the fixed 1280x720 Open3D viewer camera."""
+def _configure_reference_camera(
+    visualizer: Any,
+    frame: DemoFrame,
+    *,
+    width: int = OPEN3D_RENDER_WIDTH,
+    height: int = OPEN3D_RENDER_HEIGHT,
+) -> None:
+    """Use the RGB-D camera as the reference Open3D viewer camera."""
     import open3d as o3d
 
     intrinsics = frame.intrinsics
+    scale_x = width / OPEN3D_RENDER_WIDTH
+    scale_y = height / OPEN3D_RENDER_HEIGHT
     parameters = o3d.camera.PinholeCameraParameters()
     parameters.intrinsic = o3d.camera.PinholeCameraIntrinsic(
-        OPEN3D_RENDER_WIDTH,
-        OPEN3D_RENDER_HEIGHT,
-        float(intrinsics[0, 0]),
-        float(intrinsics[1, 1]),
-        float(intrinsics[0, 2]),
-        float(intrinsics[1, 2]),
+        width,
+        height,
+        float(intrinsics[0, 0]) * scale_x,
+        float(intrinsics[1, 1]) * scale_y,
+        float(intrinsics[0, 2]) * scale_x,
+        float(intrinsics[1, 2]) * scale_y,
     )
     parameters.extrinsic = np.eye(4, dtype=np.float64)
     if not visualizer.get_view_control().convert_from_pinhole_camera_parameters(
@@ -480,16 +559,29 @@ def _configure_reference_camera(visualizer: Any, frame: DemoFrame) -> None:
         raise RuntimeError("Open3D rejected the RGB-D reference camera parameters")
 
 
-def _open3d_visualizer(frame: DemoFrame, grasps: np.ndarray, *, top_k: int, visible: bool) -> Any:
+def _open3d_visualizer(
+    frame: DemoFrame,
+    grasps: np.ndarray,
+    *,
+    top_k: int,
+    visible: bool,
+    window_name: str = "GraRe demo",
+    width: int = OPEN3D_RENDER_WIDTH,
+    height: int = OPEN3D_RENDER_HEIGHT,
+    left: int = 50,
+    top: int = 50,
+) -> Any:
     import open3d as o3d
 
     cloud = _open3d_cloud(frame)
     group = _baseline_style_grasp_group(grasps, top_k=top_k)
     visualizer = o3d.visualization.Visualizer()
     created = visualizer.create_window(
-        window_name="GraRe demo",
-        width=OPEN3D_RENDER_WIDTH,
-        height=OPEN3D_RENDER_HEIGHT,
+        window_name=window_name,
+        width=width,
+        height=height,
+        left=left,
+        top=top,
         visible=visible,
     )
     if not created:
@@ -503,7 +595,7 @@ def _open3d_visualizer(frame: DemoFrame, grasps: np.ndarray, *, top_k: int, visi
             visualizer.add_geometry(gripper)
         visualizer.poll_events()
         visualizer.update_renderer()
-        _configure_reference_camera(visualizer, frame)
+        _configure_reference_camera(visualizer, frame, width=width, height=height)
         visualizer.poll_events()
         visualizer.update_renderer()
         return visualizer
@@ -533,12 +625,119 @@ def save_open3d_render(
     return path
 
 
-def _show_open3d(frame: DemoFrame, grasps: np.ndarray, *, top_k: int) -> None:
-    visualizer = _open3d_visualizer(frame, grasps, top_k=top_k, visible=True)
+def _show_open3d(
+    frame: DemoFrame,
+    detector_grasps: np.ndarray,
+    grare_grasps: np.ndarray,
+    *,
+    top_k: int,
+) -> None:
+    """Show one interactive scene with a Detector/GraRe score toggle.
+
+    ``grare_grasps`` is expected to be in detector candidate order.  The
+    detector's NMS/top-k selection is used for both modes so pressing the
+    button changes only the vertex colors, never the displayed poses.
+    """
+    import open3d as o3d
+    from open3d.visualization import gui, rendering
+
+    detector_array = np.asarray(detector_grasps, dtype=np.float32)
+    grare_array = np.asarray(grare_grasps, dtype=np.float32)
+    if detector_array.shape != grare_array.shape:
+        raise ValueError("detector and GraRe grasp arrays must have the same shape")
+
+    display_group = _baseline_style_grasp_group(detector_array, top_k=top_k)
+    display_detector = np.asarray(display_group.grasp_group_array, dtype=np.float32).copy()
+    display_indices = _selected_row_indices(detector_array, display_detector)
+    display_grare = grare_array[display_indices].copy()
+    if not np.array_equal(display_detector[:, 1:], display_grare[:, 1:]):
+        raise ValueError("Detector and GraRe display candidates do not have identical poses")
+
+    app = gui.Application.instance
     try:
-        visualizer.run()
-    finally:
-        visualizer.destroy_window()
+        app.initialize()
+        window = app.create_window(
+            "GraRe demo — score view",
+            OPEN3D_VIEW_WIDTH,
+            OPEN3D_VIEW_HEIGHT,
+            50,
+            50,
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "Open3D could not create the interactive viewer. "
+            "This host may be headless; omit --show and open the saved PLY assets "
+            "on a desktop host instead."
+        ) from exc
+
+    scene_widget = gui.SceneWidget()
+    scene_widget.scene = rendering.Open3DScene(window.renderer)
+    # Match the legacy Visualizer defaults used by the original GraspNet demo:
+    # white background, vertex colors, directional lighting, and 5 px points.
+    scene_widget.scene.set_background([1.0, 1.0, 1.0, 1.0])
+    scene_widget.scene.set_lighting(rendering.Open3DScene.NO_SHADOWS, [0.577, -0.577, -0.577])
+    scene_widget.set_view_controls(gui.SceneWidget.Controls.ROTATE_CAMERA)
+
+    cloud_material = rendering.MaterialRecord()
+    cloud_material.shader = "defaultUnlit"
+    cloud_material.point_size = 5.0
+    gripper_material = rendering.MaterialRecord()
+    gripper_material.shader = "defaultLit"
+
+    scene_widget.scene.add_geometry("scene_cloud", _open3d_cloud(frame), cloud_material)
+    detector_mesh = _colored_gripper_mesh(display_detector)
+    grare_mesh = _colored_gripper_mesh(display_grare)
+
+    def set_gripper_mesh(mesh: Any) -> None:
+        if scene_widget.scene.has_geometry("grippers"):
+            scene_widget.scene.remove_geometry("grippers")
+        if len(mesh.vertices):
+            scene_widget.scene.add_geometry("grippers", mesh, gripper_material)
+        scene_widget.force_redraw()
+
+    set_gripper_mesh(detector_mesh)
+
+    button = gui.Button("Scores: Detector")
+    button.tooltip = "Switch between Detector and GraRe grasp scores"
+    showing_grare = False
+
+    def on_button_clicked() -> None:
+        nonlocal showing_grare
+        showing_grare = not showing_grare
+        set_gripper_mesh(grare_mesh if showing_grare else detector_mesh)
+        button.text = "Scores: GraRe" if showing_grare else "Scores: Detector"
+
+    button.set_on_clicked(on_button_clicked)
+
+    def on_layout(layout_context: Any) -> None:
+        content = window.content_rect
+        scene_widget.frame = content
+        preferred = button.calc_preferred_size(layout_context, button.Constraints())
+        button.frame = gui.Rect(
+            content.x + 12,
+            content.y + 12,
+            max(preferred.width + 20, 180),
+            preferred.height + 10,
+        )
+
+    window.set_on_layout(on_layout)
+    window.add_child(scene_widget)
+    window.add_child(button)
+
+    intrinsic = o3d.camera.PinholeCameraIntrinsic(
+        OPEN3D_VIEW_WIDTH,
+        OPEN3D_VIEW_HEIGHT,
+        float(frame.intrinsics[0, 0]) * OPEN3D_VIEW_WIDTH / OPEN3D_RENDER_WIDTH,
+        float(frame.intrinsics[1, 1]) * OPEN3D_VIEW_HEIGHT / OPEN3D_RENDER_HEIGHT,
+        float(frame.intrinsics[0, 2]) * OPEN3D_VIEW_WIDTH / OPEN3D_RENDER_WIDTH,
+        float(frame.intrinsics[1, 2]) * OPEN3D_VIEW_HEIGHT / OPEN3D_RENDER_HEIGHT,
+    )
+    scene_widget.setup_camera(
+        intrinsic,
+        np.eye(4, dtype=np.float64),
+        scene_widget.scene.bounding_box,
+    )
+    app.run()
 
 
 def _summary_path_values(paths: dict[str, Path]) -> dict[str, str]:
@@ -616,6 +815,12 @@ def main() -> int:
             "local_cloud_nonempty": int(np.count_nonzero(np.any(features["cloud_mask"], axis=1))),
         }
     np.save(grare_path, grare_grasps)
+    grare_detector_order = grare_grasps
+    if len(grare_grasps) and "original_indices" in rerank_summary:
+        grare_detector_order = _restore_original_candidate_order(
+            grare_grasps,
+            rerank_summary["original_indices"],
+        )
     open3d_assets = save_open3d_assets(
         output_dir,
         frame=frame,
@@ -640,7 +845,12 @@ def main() -> int:
             ),
         }
     if args.show:
-        _show_open3d(frame, grare_grasps, top_k=int(args.preview_top_k))
+        _show_open3d(
+            frame,
+            detector_grasps,
+            grare_detector_order,
+            top_k=int(args.preview_top_k),
+        )
 
     summary = {
         **plan,

@@ -38,7 +38,11 @@ detectors = [
 hub = [
     "huggingface_hub>=0.26",
 ]
-test = ["pytest>=7"]
+test = [
+    "pytest>=7",
+    # The HF asset tests import the publishing helpers during collection.
+    "huggingface_hub>=0.26",
+]
 
 [project.scripts]
 grare-run = "grare.cli.run:main"
