@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from pathlib import Path
+from types import SimpleNamespace
+
 import numpy as np
 
 import pytest
@@ -8,6 +11,7 @@ from grare.cli.demo import (
     _apply_baseline_visualization_steps,
     _build_pose_features,
     _config_name_for,
+    _load_graspnet_frame,
     _parse_scene_id,
     _restore_original_candidate_order,
     _score_color_values,
@@ -74,7 +78,54 @@ def test_demo_score_toggle_restores_grare_scores_to_detector_pose_order() -> Non
     restored = _restore_original_candidate_order(reranked, order)
     assert np.array_equal(restored[:, 1:], detector[:, 1:])
     assert np.allclose(restored[:, 0], [0.8, 0.7, 0.9])
-    assert np.allclose(_score_color_values(restored[:, 0]), [0.8, 0.7, 0.9])
+    assert np.allclose(_score_color_values(restored[:, 0]), [0.5, 0.0, 1.0])
+
+
+def test_demo_score_colors_normalize_out_of_range_grare_scores() -> None:
+    assert np.allclose(_score_color_values(np.array([-2.0, 0.0, 2.0], dtype=np.float32)), [0.0, 0.5, 1.0])
+    assert np.allclose(_score_color_values(np.array([3.0, 3.0], dtype=np.float32)), [0.5, 0.5])
+
+
+@pytest.mark.parametrize("mask_kind", ["missing", "valid", "wrong_shape", "empty"])
+def test_demo_frame_workspace_mask(tmp_path: Path, mask_kind: str) -> None:
+    import cv2
+    from scipy.io import savemat
+
+    frame_dir = tmp_path / "scenes" / "scene_0100" / "realsense"
+    for folder in ("rgb", "depth", "meta", "workspace_mask"):
+        (frame_dir / folder).mkdir(parents=True)
+    rgb = np.full((2, 2, 3), [10, 20, 30], dtype=np.uint8)
+    depth = np.array([[1000, 0], [1000, 1000]], dtype=np.uint16)
+    assert cv2.imwrite(str(frame_dir / "rgb" / "0000.png"), rgb)
+    assert cv2.imwrite(str(frame_dir / "depth" / "0000.png"), depth)
+    savemat(
+        frame_dir / "meta" / "0000.mat",
+        {"intrinsic_matrix": np.diag([2.0, 2.0, 1.0]), "factor_depth": 1000.0},
+    )
+    masks = {
+        "valid": np.array([[255, 255], [0, 255]], dtype=np.uint8),
+        "wrong_shape": np.ones((3, 2), dtype=np.uint8),
+        "empty": np.zeros((2, 2), dtype=np.uint8),
+    }
+    if mask_kind in masks:
+        assert cv2.imwrite(str(frame_dir / "workspace_mask" / "0000.png"), masks[mask_kind])
+    resolved = SimpleNamespace(dataset_root=tmp_path, scene_id=100, frame_id=0, camera="realsense")
+    if mask_kind in {"wrong_shape", "empty"}:
+        message = "does not match depth shape" if mask_kind == "wrong_shape" else "no valid depth points"
+        with pytest.raises(ValueError, match=message):
+            _load_graspnet_frame(resolved)
+        return
+
+    frame = _load_graspnet_frame(resolved)
+    expected = [[0.0, 0.0, 1.0], [0.5, 0.5, 1.0]]
+    if mask_kind == "missing":
+        expected.insert(1, [0.0, 0.5, 1.0])
+    np.testing.assert_allclose(frame.observed_points, expected)
+    np.testing.assert_array_equal(frame.display_points, frame.observed_points)
+    np.testing.assert_array_equal(frame.display_colors, frame.observed_colors)
+    np.testing.assert_allclose(frame.observed_colors, np.tile(np.array([30, 20, 10]) / 255, (len(expected), 1)))
+    assert frame.valid_grid.sum() == 3
+    assert frame.workspace_grid.sum() == len(expected)
 
 
 def test_online_feature_extractor_needs_no_graspnet_labels() -> None:

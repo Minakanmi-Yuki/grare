@@ -14,3 +14,5 @@ paths:
 train:
   # EconomicGrasp emits more candidates per frame than GN/SBG.
   num_workers: 16
+rerank:
+  lambda: 0.8

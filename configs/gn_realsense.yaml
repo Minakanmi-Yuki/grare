@@ -10,3 +10,5 @@ paths:
   checkpoint_dir: ${GRARE_OUTPUT_ROOT}/checkpoints/gn_realsense
   rerank_dir: ${GRARE_OUTPUT_ROOT}/predictions/gn_realsense
   eval_dir: ${GRARE_OUTPUT_ROOT}/evaluation/gn_realsense
+rerank:
+  lambda: 1.0

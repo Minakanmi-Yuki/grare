@@ -217,6 +217,7 @@ def _load_graspnet_frame(resolved: ResolvedDemo) -> DemoFrame:
     frame_dir = resolved.dataset_root / "scenes" / f"scene_{resolved.scene_id:04d}" / resolved.camera
     rgb_path = frame_dir / "rgb" / f"{resolved.frame_id:04d}.png"
     depth_path = frame_dir / "depth" / f"{resolved.frame_id:04d}.png"
+    workspace_mask_path = frame_dir / "workspace_mask" / f"{resolved.frame_id:04d}.png"
     meta_path = frame_dir / "meta" / f"{resolved.frame_id:04d}.mat"
     bgr = cv2.imread(str(rgb_path), cv2.IMREAD_COLOR)
     depth = cv2.imread(str(depth_path), cv2.IMREAD_UNCHANGED)
@@ -240,16 +241,30 @@ def _load_graspnet_frame(resolved: ResolvedDemo) -> DemoFrame:
     from grare.relabeling.sam_masks import points_grid_from_depth
 
     points_grid, valid_grid = points_grid_from_depth(depth, intrinsics, depth_scale=depth_scale)
-    # Detector candidates are already collision-filtered dumps.  Keep every
-    # observed depth point for online geometry and visualization, which also
-    # lets the demo run from RGB-D/meta files alone (no label or workspace mask).
-    workspace_grid = valid_grid.copy()
+    # Match graspnet-baseline/demo.py: visualize only the workspace-masked
+    # valid depth points, rather than the complete camera field of view.
+    # This removes the bright background/table points that make the GUI view
+    # look overexposed compared with the upstream demo.
+    workspace_mask = (
+        cv2.imread(str(workspace_mask_path), cv2.IMREAD_UNCHANGED)
+        if workspace_mask_path.is_file()
+        else None
+    )
+    if workspace_mask is not None:
+        if workspace_mask.shape != depth.shape:
+            raise ValueError(
+                f"workspace_mask.png shape {workspace_mask.shape} does not match depth shape {depth.shape}"
+            )
+        workspace_grid = (workspace_mask > 0) & valid_grid
+    else:
+        # Keep RGB-D-only recovery usable when an older asset bundle omits the
+        # optional workspace mask.
+        workspace_grid = valid_grid.copy()
     observed_points = points_grid[workspace_grid].astype(np.float32, copy=False)
     observed_colors = (rgb[workspace_grid].astype(np.float32) / 255.0).astype(np.float32, copy=False)
-    # Retain the complete RGB-D field of view for rendering, matching the
-    # published GraspNet-Baseline demo image and avoiding mask-boundary crops.
-    display_points = points_grid[valid_grid].astype(np.float32, copy=False)
-    display_colors = (rgb[valid_grid].astype(np.float32) / 255.0).astype(np.float32, copy=False)
+    # The upstream demo renders the same masked cloud used above.
+    display_points = observed_points
+    display_colors = observed_colors
     if len(observed_points) == 0:
         raise ValueError("the workspace has no valid depth points")
     return DemoFrame(
@@ -445,7 +460,7 @@ def _restore_original_candidate_order(
 
 
 def _score_color_values(scores: np.ndarray) -> np.ndarray:
-    """Return scores for GraspNet's native blue (low) to red (high) map."""
+    """Min-max normalize scores for GraspNet's blue-to-red color map."""
     values = np.asarray(scores, dtype=np.float32)
     if values.ndim != 1:
         raise ValueError(f"scores must be one-dimensional, got {values.shape}")
@@ -455,7 +470,11 @@ def _score_color_values(scores: np.ndarray) -> np.ndarray:
     if not np.all(finite):
         values = values.copy()
         values[~finite] = 0.0
-    return values
+    low = float(np.min(values))
+    high = float(np.max(values))
+    if high <= low:
+        return np.full_like(values, 0.5)
+    return ((values - low) / (high - low)).astype(np.float32, copy=False)
 
 
 def _colored_gripper_mesh(grasps: np.ndarray) -> Any:
@@ -471,8 +490,9 @@ def _colored_gripper_mesh(grasps: np.ndarray) -> Any:
         mesh += Grasp(grasp).to_open3d_geometry(
             color=(float(color_value), 0.0, float(1.0 - color_value))
         )
-    if len(mesh.vertices):
-        mesh.compute_vertex_normals()
+    # Keep the mesh topology and normals exactly like
+    # graspnetAPI.plot_gripper_pro_max(); the upstream demo passes these
+    # meshes directly to Open3D without an explicit normal computation.
     return mesh
 
 
@@ -516,7 +536,9 @@ def save_open3d_assets(
     for name, grasps in (("detector", detector_grasps), ("grare", grare_grasps)):
         group = _baseline_style_grasp_group(grasps, top_k=top_k)
         mesh_path = output_dir / f"{name}_grippers.ply"
-        mesh = _merge_gripper_meshes(group.to_open3d_geometry_list())
+        # Use the same score-to-color path as the interactive viewer so both
+        # Detector and GraRe assets use a consistent min-max color scale.
+        mesh = _colored_gripper_mesh(np.asarray(group.grasp_group_array, dtype=np.float32))
         if not o3d.io.write_triangle_mesh(str(mesh_path), mesh, write_ascii=False):
             raise OSError(f"failed to write gripper mesh: {mesh_path}")
         output_paths[f"{name}_grippers"] = mesh_path
@@ -591,8 +613,13 @@ def _open3d_visualizer(
         )
     try:
         visualizer.add_geometry(cloud)
-        for gripper in group.to_open3d_geometry_list():
-            visualizer.add_geometry(gripper)
+        # Keep saved renders consistent with the interactive viewer and PLY
+        # assets: all displayed grasp scores use the same min-max color map.
+        colored_grippers = _colored_gripper_mesh(
+            np.asarray(group.grasp_group_array, dtype=np.float32)
+        )
+        if len(colored_grippers.vertices):
+            visualizer.add_geometry(colored_grippers)
         visualizer.poll_events()
         visualizer.update_renderer()
         _configure_reference_camera(visualizer, frame, width=width, height=height)
@@ -673,7 +700,7 @@ def _show_open3d(
     scene_widget = gui.SceneWidget()
     scene_widget.scene = rendering.Open3DScene(window.renderer)
     # Match the legacy Visualizer defaults used by the original GraspNet demo:
-    # white background, vertex colors, directional lighting, and 5 px points.
+    # white background, vertex colors, and the legacy 5 px point size.
     scene_widget.scene.set_background([1.0, 1.0, 1.0, 1.0])
     scene_widget.scene.set_lighting(rendering.Open3DScene.NO_SHADOWS, [0.577, -0.577, -0.577])
     scene_widget.set_view_controls(gui.SceneWidget.Controls.ROTATE_CAMERA)
@@ -682,7 +709,11 @@ def _show_open3d(
     cloud_material.shader = "defaultUnlit"
     cloud_material.point_size = 5.0
     gripper_material = rendering.MaterialRecord()
-    gripper_material.shader = "defaultLit"
+    # Display the same score colors encoded by graspnetAPI without the GUI
+    # renderer's specular/directional-light boost.  ``defaultLit`` makes the
+    # small gripper boxes look overexposed compared with the upstream legacy
+    # Visualizer, especially against the white background.
+    gripper_material.shader = "defaultUnlit"
 
     scene_widget.scene.add_geometry("scene_cloud", _open3d_cloud(frame), cloud_material)
     detector_mesh = _colored_gripper_mesh(display_detector)

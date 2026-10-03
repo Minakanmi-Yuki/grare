@@ -24,3 +24,5 @@ train:
   local_health_seed: 20260710
   min_local_raw_rms: 0.05
   min_local_shuffle_ratio: 0.05
+rerank:
+  lambda: 1.0
