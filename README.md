@@ -24,17 +24,16 @@
 
 Existing 6-DoF grasp detectors typically rank grasp candidates by detector
 confidence. However, our analysis on GraspNet-1Billion shows that detector
-confidence is often poorly aligned with grasp quality, causing successful
-grasp candidates to be ranked too low during execution. Motivated by this
-observation, we formulate grasp candidate re-ranking as a separate task for
-frozen detectors, aiming to improve candidate ordering without changing the
-detector or its grasp candidates. We propose GraRe, which estimates grasp
-quality from candidate attributes, shell-stratified local geometry, and object
-context. Candidate attributes condition the local geometric and object-context
-representations, and a Transformer fuses all three feature types. The
-predicted quality is combined with detector confidence to produce the final
-ranking. Experiments on GraspNet-1Billion with three frozen detectors show
-consistent improvements, with gains of up to 13.60 points in Average AP.
+confidence is often poorly aligned with grasp quality, leaving successful
+grasp candidates at low ranks. Motivated by this observation, we study whether
+learned re-ranking can improve candidate ordering while keeping detector
+parameters and grasp candidates unchanged. We propose GraRe, which estimates
+grasp quality from candidate attributes, shell-stratified local geometry, and
+object context. Candidate attributes condition the local geometric and
+object-context representations, and a Transformer fuses all three feature
+types. The predicted quality is combined with detector confidence to produce
+the final ranking. Experiments on GraspNet-1Billion with five frozen detectors
+show consistent improvements, with gains of up to 13.56 points in Average AP.
 Real-robot experiments further demonstrate robust grasping in cluttered
 scenes. These results show that improving candidate ranking provides a
 practical way to enhance frozen 6-DoF grasp detectors.
@@ -42,18 +41,15 @@ practical way to enhance frozen 6-DoF grasp detectors.
 ## Overview
 
 <p align="center">
-  <img src="assets/grare-architecture.png" alt="GraRe architecture: frozen detector, candidate encoder, feature fusion, and re-ranking." width="100%" />
+  <img src="https://minakanmi-yuki.github.io/grare/assets/architecture.webp" alt="GraRe architecture: frozen detector, candidate-conditioned local geometry and object context through FiLM, Transformer quality prediction, and Score Fusion." width="100%" />
 </p>
 
-Given the grasp candidates produced by a frozen detector, the task keeps all
-candidates unchanged and predicts a new ordering. GraRe evaluates each
-candidate using three complementary types of information: candidate
-attributes, shell-stratified local geometry, and object context. The
-shell-stratified representation preserves geometry across different distances
-from the gripper, while object context describes the candidate relative to the
-visible object. Candidate attributes condition both geometric representations
-before a Transformer fuses all three to predict grasp quality. GraRe combines
-the predicted quality with detector confidence for final ranking.
+**Overview of GraRe.** (a) A frozen detector generates grasp candidates.
+(b) Candidate features condition local geometric and object-context features
+through FiLM. (c) A Transformer fuses the three representations to predict
+grasp quality. (d) Score Fusion combines predicted quality with detector
+confidence to re-rank the unchanged grasp candidates. TF denotes Transformer
+block.
 
 ## Environment
 
@@ -277,22 +273,25 @@ the color changes. The scene can still be rotated, zoomed, and panned with the
 mouse. Omit `--show` to only save the PLY assets.
 
 ## Results
-The following offline GraspNet-1Billion results use the official evaluation protocol.
+The following offline GraspNet-1Billion results match the current manuscript
+and use the official evaluation protocol.
 Each metric is reported as `Detector / GraRe`.
 
 | Detector | Camera | λ | Seen | Similar | Novel | Average |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| GN | RealSense | 1.0 | <small>47.83 / <strong>64.16</strong></small> | <small>42.79 / <strong>58.47</strong></small> | <small>16.94 / <strong>25.31</strong></small> | <small>35.85 / <strong>49.32</strong></small> |
-| SBG | RealSense | 0.9 | <small>62.27 / <strong>68.67</strong></small> | <small>56.92 / <strong>62.62</strong></small> | <small>23.80 / <strong>27.30</strong></small> | <small>47.66 / <strong>52.86</strong></small> |
-| EG | RealSense | 0.9 | <small>69.30 / <strong>75.18</strong></small> | <small>61.50 / <strong>65.05</strong></small> | <small>25.28 / <strong>28.14</strong></small> | <small>52.02 / <strong>56.12</strong></small> |
-| HGGD | RealSense | 0.8 | <small>63.37 / <strong>67.38</strong></small> | <small>52.28 / <strong>55.26</strong></small> | <small>23.83 / <strong>25.72</strong></small> | <small>46.49 / <strong>49.45</strong></small> |
-| RNGNet | RealSense | 0.5 | <small>75.32 / <strong>77.73</strong></small> | <small>66.95 / <strong>69.52</strong></small> | <small>32.03 / <strong>32.50</strong></small> | <small>58.10 / <strong>59.92</strong></small> |
-| GN | Kinect | 0.9 | <small>41.97 / <strong>53.92</strong></small> | <small>37.56 / <strong>46.32</strong></small> | <small>12.24 / <strong>15.95</strong></small> | <small>30.59 / <strong>38.73</strong></small> |
-| EG | Kinect | 0.9 | <small>63.75 / <strong>69.78</strong></small> | <small>52.43 / <strong>57.23</strong></small> | <small>19.61 / <strong>22.41</strong></small> | <small>45.26 / <strong>49.81</strong></small> |
+| GN | RealSense | 1.0 | <small>47.83 / <strong>64.36</strong></small> | <small>42.79 / <strong>58.44</strong></small> | <small>16.94 / <strong>25.45</strong></small> | <small>35.86 / <strong>49.42</strong></small> |
+| SBG | RealSense | 0.8 | <small>62.27 / <strong>68.47</strong></small> | <small>56.92 / <strong>62.55</strong></small> | <small>23.79 / <strong>27.24</strong></small> | <small>47.66 / <strong>52.75</strong></small> |
+| EG | RealSense | 0.8 | <small>69.31 / <strong>74.92</strong></small> | <small>61.49 / <strong>65.16</strong></small> | <small>25.28 / <strong>28.35</strong></small> | <small>52.03 / <strong>56.14</strong></small> |
+| HGGD | RealSense | 0.8 | <small>63.37 / <strong>67.58</strong></small> | <small>52.28 / <strong>55.37</strong></small> | <small>23.83 / <strong>25.66</strong></small> | <small>46.49 / <strong>49.53</strong></small> |
+| RNGNet | RealSense | 0.5 | <small>75.32 / <strong>77.67</strong></small> | <small>66.95 / <strong>69.64</strong></small> | <small>32.03 / <strong>32.63</strong></small> | <small>58.10 / <strong>59.98</strong></small> |
+| GN | Kinect | 1.0 | <small>41.98 / <strong>54.06</strong></small> | <small>37.57 / <strong>46.38</strong></small> | <small>12.24 / <strong>15.97</strong></small> | <small>30.60 / <strong>38.80</strong></small> |
+| EG | Kinect | 0.8 | <small>63.76 / <strong>69.72</strong></small> | <small>52.42 / <strong>57.47</strong></small> | <small>19.61 / <strong>22.06</strong></small> | <small>45.26 / <strong>49.75</strong></small> |
 | HGGD | Kinect | 0.8 | <small>60.43 / <strong>64.95</strong></small> | <small>46.74 / <strong>50.03</strong></small> | <small>19.23 / <strong>19.85</strong></small> | <small>42.13 / <strong>44.94</strong></small> |
-| RNGNet | Kinect | 0.4 | <small>73.50 / <strong>75.37</strong></small> | <small>59.20 / <strong>60.66</strong></small> | <small>26.44 / <strong>26.46</strong></small> | <small>53.05 / <strong>54.16</strong></small> |
+| RNGNet | Kinect | 0.5 | <small>73.50 / <strong>75.34</strong></small> | <small>59.20 / <strong>60.86</strong></small> | <small>26.44 / <strong>26.58</strong></small> | <small>53.05 / <strong>54.26</strong></small> |
 
-![Seen, Similar, and Novel AP across score-fusion lambda values](assets/results/lambda_sweep_2x3.png)
+The table uses the manuscript's fixed Score Fusion settings: λ=1.0 for GN,
+λ=0.8 for SBG, EG, and HGGD, and λ=0.5 for RNGNet across the available cameras.
+Detector values are detector-only (`λ=0`). SBG is evaluated on RealSense only.
 
 ## Computational Cost
 
